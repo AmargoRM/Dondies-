@@ -1,0 +1,125 @@
+/* Premios Dundies – Dirección de Aguas. Pensado primero para celular. */
+:root {
+  --petroleo: #0a3440;
+  --petroleo-2: #0f4a5a;
+  --petroleo-3: #145b6e;
+  --celeste: #5ccdf5;
+  --celeste-2: #a8e6fb;
+  --blanco: #ffffff;
+  --texto: #10303b;
+  --texto-suave: #4d6a74;
+  --dorado: #f5c542;
+  --error: #ff6b6b;
+  --radio: 18px;
+  font-family: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(92, 205, 245, .18), transparent 45%),
+    radial-gradient(circle at 100% 30%, rgba(92, 205, 245, .10), transparent 40%),
+    var(--petroleo);
+  color: var(--blanco);
+  line-height: 1.45;
+}
+
+.contenedor { max-width: 1100px; margin: 0 auto; padding: 0 16px 48px; }
+
+/* ---------- Encabezado ---------- */
+.encabezado { text-align: center; padding: 28px 16px 12px; }
+.encabezado .mascota { width: 64px; height: auto; filter: drop-shadow(0 6px 12px rgba(0,0,0,.35)); }
+.titulo {
+  margin: 8px 0 0;
+  font-family: "Bebas Neue", "Nunito", sans-serif;
+  font-size: clamp(2.6rem, 11vw, 4.8rem);
+  letter-spacing: .04em;
+  line-height: .95;
+}
+.titulo .premios { color: var(--blanco); display: block; font-size: .55em; letter-spacing: .25em; }
+.titulo .dundies { color: var(--celeste); text-shadow: 0 3px 0 #0b6d93, 0 8px 22px rgba(92,205,245,.35); }
+.subtitulo { margin: 6px 0 0; color: var(--celeste-2); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: .85rem; }
+.lema { margin: 10px 0 0; font-style: italic; color: var(--blanco); opacity: .9; }
+
+/* ---------- Cuenta regresiva ---------- */
+.cuenta {
+  display: flex; justify-content: center; gap: 8px; margin: 18px auto 6px; flex-wrap: wrap;
+}
+.cuenta .caja {
+  background: var(--petroleo-2); border: 1px solid rgba(92,205,245,.35);
+  border-radius: 12px; padding: 8px 10px; min-width: 64px; text-align: center;
+}
+.cuenta .num { font-size: 1.6rem; font-weight: 800; color: var(--celeste); display: block; }
+.cuenta .lbl { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; opacity: .8; }
+.fase-actual { text-align: center; margin: 4px 0 0; font-weight: 700; }
+
+/* ---------- Contadores "Le quedan..." ---------- */
+.chips { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 16px 0; }
+.chip {
+  background: rgba(92,205,245,.14); color: var(--celeste-2); border: 1px solid rgba(92,205,245,.4);
+  padding: 6px 12px; border-radius: 999px; font-weight: 700; font-size: .9rem;
+}
+
+/* ---------- Tarjetas de categoría ---------- */
+.rejilla { display: grid; grid-template-columns: 1fr; gap: 18px; margin-top: 12px; }
+@media (min-width: 560px) { .rejilla { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .rejilla { grid-template-columns: repeat(3, 1fr); } }
+
+.tarjeta {
+  position: relative; overflow: hidden;
+  background: var(--blanco); color: var(--texto);
+  border: 3px solid var(--celeste); border-radius: var(--radio);
+  padding: 18px 18px 64px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.28);
+}
+.tarjeta .icono { font-size: 2.2rem; line-height: 1; }
+.tarjeta h3 {
+  margin: 8px 0 6px; font-size: 1.25rem; font-weight: 900; text-transform: uppercase;
+  color: var(--petroleo-3); letter-spacing: .02em;
+}
+.tarjeta .porque { margin: 0; font-style: italic; color: var(--texto-suave); }
+.tarjeta .porque b { font-style: normal; color: var(--texto); }
+.tarjeta .para { margin: 14px 0 0; font-weight: 800; color: var(--texto); }
+.tarjeta .para .linea { display: inline-block; min-width: 55%; border-bottom: 2px dotted var(--celeste); }
+.tarjeta .autor { font-size: .78rem; color: var(--texto-suave); margin-top: 8px; }
+.tarjeta .mascota-mini { position: absolute; right: 12px; bottom: 16px; width: 38px; z-index: 2; }
+.tarjeta .ola { position: absolute; left: 0; right: 0; bottom: 0; height: 52px; z-index: 1; }
+.tarjeta.oficial { border-color: var(--dorado); }
+.tarjeta .sello {
+  position: absolute; top: 12px; right: 12px; background: var(--dorado); color: #4a3500;
+  font-size: .7rem; font-weight: 900; padding: 3px 8px; border-radius: 999px; text-transform: uppercase;
+}
+
+.acciones { display: flex; gap: 8px; align-items: center; margin-top: 12px; position: relative; z-index: 3; }
+
+/* ---------- Botones ---------- */
+.boton {
+  appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 800;
+  border-radius: 999px; padding: 10px 16px; min-height: 44px;
+  background: var(--celeste); color: var(--petroleo);
+}
+.boton:hover { filter: brightness(1.08); }
+.boton:disabled { opacity: .5; cursor: not-allowed; }
+.boton.votado { background: var(--petroleo-3); color: var(--blanco); }
+.boton.secundario { background: transparent; color: var(--texto-suave); border: 1px solid #c9dde3; }
+.contador-votos { font-weight: 900; color: var(--petroleo-3); margin-left: auto; }
+
+/* ---------- Formularios ---------- */
+.panel {
+  background: var(--petroleo-2); border: 1px solid rgba(92,205,245,.3);
+  border-radius: var(--radio); padding: 20px; max-width: 460px; margin: 20px auto;
+}
+.panel h2 { margin-top: 0; color: var(--celeste); }
+label { display: block; font-weight: 700; margin: 12px 0 4px; }
+input, select, textarea {
+  width: 100%; font: inherit; padding: 12px; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: var(--blanco);
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--celeste); border-color: transparent; }
+.aviso { padding: 10px 12px; border-radius: 12px; margin: 12px 0; font-weight: 600; }
+.aviso.error { background: rgba(255,107,107,.15); color: #ffc9c9; border: 1px solid rgba(255,107,107,.5); }
+.aviso.ok { background: rgba(92,205,245,.15); color: var(--celeste-2); border: 1px solid rgba(92,205,245,.5); }
+a { color: var(--celeste); }
