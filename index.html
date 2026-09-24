@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es-CR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Premios Dundies – Dirección de Aguas</title>
+  <meta name="description" content="Premios Dundies de la Dirección de Aguas: proponga categorías, nomine y vote.">
+  <meta name="theme-color" content="#0a3440">
+  <link rel="icon" href="img/gota.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Nunito:ital,wght@0,400;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+  <nav class="nav" id="nav" aria-label="Menú principal"></nav>
+
+  <header class="encabezado">
+    <a href="#/"><img class="mascota" src="img/gota.svg" alt="Inicio"></a>
+    <h1 class="titulo"><span class="premios">Premios</span><span class="dundies">DUNDIES</span></h1>
+    <p class="subtitulo">Dirección de Aguas</p>
+    <p class="lema">Porque el agua también nos une…</p>
+  </header>
+
+  <main class="contenedor" id="app">
+    <p class="cargando">Cargando…</p>
+  </main>
+
+  <footer class="pie">Premios Dundies · Dirección de Aguas</footer>
+
+  <dialog id="modal"></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,58 +1,108 @@
 # Premios Dundies – Dirección de Aguas 💧🏆
 
-Web para elegir categorías, nominar compañeros y votar a los ganadores,
+Web para proponer categorías, nominar compañeros y votar a los ganadores,
 inspirada en los Dundies de *The Office*.
 
-- **Sitio:** páginas estáticas (HTML, CSS y JavaScript) publicadas gratis en GitHub Pages.
-- **Base de datos y cuentas:** Supabase (gratis en el plan inicial).
-- **Reglas anti-trampa:** todas viven dentro de la base de datos (archivo `supabase/schema.sql`).
-  El navegador solo muestra botones; aunque alguien los manipule, la base de datos rechaza lo que no cumpla las reglas.
+- **Web:** <https://amargorm.github.io/Dondies-/> (GitHub Pages, gratis).
+- **Base de datos y cuentas:** Supabase (plan gratis).
+- **Reglas anti-trampa:** viven dentro de la base de datos (`supabase/schema.sql`). Aunque alguien manipule la web, la base rechaza lo que no cumpla las reglas.
+
+## Qué hace la web
+
+| Pantalla | Qué se puede hacer |
+|---|---|
+| Inicio | Fase actual, cuenta regresiva, cómo funciona |
+| Crear cuenta / Entrar | Registro con correo, contraseña y nombre visible; confirmación por correo; "¿Olvidaste tu contraseña?" |
+| Categorías | Proponer (hasta 15), aviso de duplicados, votar (hasta 15), quitar voto, reportar. "Le quedan X propuestas / X votos" |
+| Nominar | En cada categoría oficial, elegir a una persona registrada |
+| Votar | Voto final secreto, 1 por categoría |
+| Ganadores | Tarjeta por ganador, botón para descargarla como imagen |
+| Admin | Participación, fechas, dominio permitido, cerrar fases, desempatar, reportes, editar/ocultar/fusionar categorías, publicar resultados |
 
 ---
 
-## Estado del proyecto
-
-| Etapa | Qué incluye | Estado |
-|---|---|---|
-| 1 | Base de datos con todas las reglas + vista previa del diseño | ✅ Lista |
-| 2 | Registro, inicio de sesión, recuperar contraseña, correo (SMTP), publicar en GitHub Pages | Pendiente |
-| 3 | Pantallas de las fases 1, 2 y 3 | Pendiente |
-| 4 | Ganadores (tarjeta descargable), panel del admin, lista de pruebas manuales | Pendiente |
-
----
+# Instalación (una sola vez, ~30 minutos)
 
 ## Paso 1 – Crear el proyecto en Supabase
 
-1. Entre a <https://supabase.com> y haga clic en **Start your project**. Regístrese con su cuenta de GitHub o con un correo.
-2. Haga clic en **New project**.
-3. Llene el formulario:
+1. Entre a <https://supabase.com> → **Start your project**. Regístrese con GitHub o con un correo.
+2. **New project**. Llene:
    - **Name:** `premios-dundies`
-   - **Database Password:** haga clic en **Generate a password** y **guárdela en un lugar seguro** (un gestor de contraseñas o un papel en un lugar seguro). Casi nunca la va a usar, pero si la pierde no se recupera.
-   - **Region:** elija **East US (North Virginia)**, que es la más cercana a Costa Rica.
-4. Haga clic en **Create new project** y espere 1–2 minutos mientras se prepara.
+   - **Database Password:** clic en **Generate a password** y guárdela en un lugar seguro.
+   - **Region:** **East US (North Virginia)** (la más cercana a Costa Rica).
+3. **Create new project** y espere 1–2 minutos.
 
 ## Paso 2 – Pegar el script de la base de datos
 
-1. En el menú de la izquierda de Supabase, haga clic en **SQL Editor** (ícono de una hoja con `>_`).
-2. Haga clic en **New query** (o el botón **+**).
-3. Abra el archivo [`supabase/schema.sql`](supabase/schema.sql) de este repositorio, haga clic en el botón **Copy raw file** (ícono de dos hojas, arriba a la derecha del archivo en GitHub) y péguelo completo en el editor de Supabase.
-4. Haga clic en **Run** (o presione `Ctrl + Enter`).
-5. Debe aparecer **Success. No rows returned**. Eso significa que todo se creó bien.
+1. Menú izquierdo → **SQL Editor** → **New query**.
+2. Abra [`supabase/schema.sql`](supabase/schema.sql) en GitHub, clic en el botón **Copy raw file** (dos hojitas, arriba a la derecha) y péguelo completo en el editor.
+3. Clic en **Run**. Debe decir **Success. No rows returned**.
 
-> ⚠️ **Ejecútelo una sola vez.** Si lo ejecuta de nuevo, va a dar errores del tipo
-> *"already exists"* (ya existe). Eso no daña nada: simplemente significa que ya estaba creado.
+> Ejecútelo **una sola vez**. Si lo corre otra vez dará errores *"already exists"*; no daña nada.
 
-Para comprobar: en el menú izquierdo, entre a **Table Editor**. Debe ver las tablas
-`config`, `profiles`, `categories`, `category_votes`, `category_reports`,
-`nominations`, `finalists`, `final_ballots` y `final_tally`.
+## Paso 3 – Conectar la web con Supabase
 
-## Paso 3 – Hacerse administrador
+1. En Supabase: **Project Settings** (engranaje) → **API Keys** (o **Data API**). Copie:
+   - **Project URL** (ej. `https://abcdxyz.supabase.co`)
+   - **anon public key** (en proyectos nuevos se llama **publishable key** y empieza con `sb_publishable_`).
+2. En GitHub abra [`js/config.js`](js/config.js) → ícono del lápiz (**Edit this file**).
+3. Reemplace `PEGAR_AQUI_PROJECT_URL` y `PEGAR_AQUI_ANON_KEY` por esos dos valores (deje las comillas).
+4. Clic en **Commit changes…** → **Commit changes**. En 1–2 minutos la web se actualiza.
 
-Mientras no exista la página de registro (Etapa 2), cree su usuario desde Supabase:
+> 🚫 **Nunca pegue la `service_role` key (o `secret key`) en ningún archivo.** Esa llave se salta todas
+> las reglas. Si se publica por error: **Project Settings → API Keys** → genere una nueva de inmediato.
 
-1. Menú izquierdo → **Authentication** → **Users** → botón **Add user** → **Create new user**.
-2. Escriba su correo y una contraseña. **Marque la casilla _Auto Confirm User_** y haga clic en **Create user**.
-3. Vuelva a **SQL Editor** → **New query**, pegue esto **cambiando el correo por el suyo**, y haga clic en **Run**:
+## Paso 4 – Decirle a Supabase cuál es la dirección de la web
+
+Sin esto, los enlaces de los correos (confirmar cuenta, recuperar contraseña) llevan a una página que no existe.
+
+1. Supabase → **Authentication** → **URL Configuration**.
+2. **Site URL:** `https://amargorm.github.io/Dondies-/`
+3. **Redirect URLs** → **Add URL** → `https://amargorm.github.io/Dondies-/` → **Save**.
+
+## Paso 5 – Correo propio (SMTP) con Resend
+
+El correo que trae Supabase solo manda **2–3 correos por hora** y únicamente a miembros del proyecto.
+Para que le lleguen a todo el personal, hay que conectar un servicio de correo. Resend es gratis hasta 3 000 correos al mes.
+
+**5.1 Crear la cuenta de Resend**
+1. Entre a <https://resend.com> → **Sign up**.
+2. **Domains** → **Add Domain** → escriba un dominio que usted controle (ej. `dundies.midominio.com`).
+3. Resend le muestra 3–4 registros (tipo TXT y MX). Hay que agregarlos en el lugar donde se administra ese dominio
+   (el proveedor del dominio o el departamento de TI). Cuando estén, clic en **Verify**. Puede tardar desde minutos hasta unas horas.
+   - Si no tiene un dominio propio ni acceso al de la institución, pídale a TI que agregue esos registros, o use **Brevo** (abajo), que permite enviar verificando solo una dirección de correo.
+4. **API Keys** → **Create API Key** → copie la llave (empieza con `re_`). Solo se muestra una vez.
+
+**5.2 Conectarlo en Supabase**
+1. Supabase → **Authentication** → **Emails** → pestaña **SMTP Settings** → activar **Enable Custom SMTP**.
+2. Llene:
+   - **Sender email:** `premios@dundies.midominio.com` (debe ser del dominio verificado)
+   - **Sender name:** `Premios Dundies`
+   - **Host:** `smtp.resend.com`
+   - **Port:** `465`
+   - **Username:** `resend`
+   - **Password:** la llave `re_…`
+3. **Save**.
+4. En **Authentication → Rate Limits**, suba **Rate limit for sending emails** a unos 100 por hora.
+
+**Alternativa: Brevo** (<https://www.brevo.com>, 300 correos al día gratis): **Senders, Domains & Dedicated IPs** → agregue y verifique su correo remitente;
+**SMTP & API** → **SMTP** → copie el login y genere una **SMTP key**. En Supabase: Host `smtp-relay.brevo.com`, Port `587`, Username = el login de Brevo, Password = la SMTP key.
+
+**5.3 (Opcional) Textos de los correos en español**
+Supabase → **Authentication** → **Emails** → **Templates**:
+- **Confirm signup** → Subject: `Confirme su cuenta – Premios Dundies`. En el cuerpo, deje el enlace `{{ .ConfirmationURL }}`.
+- **Reset Password** → Subject: `Recuperar contraseña – Premios Dundies`, con `{{ .ConfirmationURL }}`.
+
+## Paso 6 – Publicar en GitHub Pages
+
+1. En GitHub, en su repositorio: **Settings** → **Pages**.
+2. **Source:** *Deploy from a branch*. **Branch:** la rama donde está este código (hoy `claude/premios-dundies-supabase-yo986r`; si la une a `main`, elija `main`) y carpeta **/ (root)** → **Save**.
+3. En 1–2 minutos la web queda en <https://amargorm.github.io/Dondies-/>.
+
+## Paso 7 – Hacerse administrador
+
+1. Entre a la web → **Crear cuenta**, confirme el correo.
+2. Supabase → **SQL Editor** → **New query**, pegue esto **con su correo** y **Run**:
 
    ```sql
    update public.profiles
@@ -60,83 +110,65 @@ Mientras no exista la página de registro (Etapa 2), cree su usuario desde Supab
    where id = (select id from auth.users where email = 'SU_CORREO@ejemplo.com');
    ```
 
-4. Debe decir **Success. 1 row affected** (1 fila modificada). Si dice *0 rows*, el correo no coincide exactamente: revíselo.
+3. Debe decir **1 row affected**. Recargue la web: aparece la pestaña **Admin**.
 
-Cuando exista la página de registro, podrá cambiar su nombre visible desde la web.
+## Paso 8 – Ajustar fechas y dominio
 
-## Paso 4 – Anotar dos datos para la Etapa 2
-
-En Supabase, menú izquierdo → **Project Settings** (engranaje) → **API Keys** / **Data API**. Anote:
-
-- **Project URL**: algo como `https://abcdxyz.supabase.co`
-- **anon public key** (en proyectos nuevos puede llamarse **publishable key** y empezar con `sb_publishable_`).
-
-Esas dos se pueden poner en el código sin problema: son públicas y solo permiten lo que las reglas dejan.
-
-> 🚫 **Nunca copie la `service_role` key (o `secret key`) en ningún archivo de este repositorio.**
-> Esa llave se salta todas las reglas. Si alguna vez se publica por error, vaya a
-> **Project Settings → API Keys** y genere una nueva de inmediato.
+En **Admin → Fechas y dominio**:
+- Las fechas vienen puestas así: fase 1 empieza el día en que corrió el script y dura 3 semanas; luego 1 semana de nominaciones y 1 de votación final. Cámbielas y **Guardar**.
+- **Dominio:** escriba por ejemplo `aya.go.cr` para aceptar solo esos correos. Vacío = cualquier correo.
 
 ---
 
-## Reglas que ya aplica la base de datos
+# Cómo se usa durante el concurso (admin)
 
-| Regla | Cómo se hace cumplir |
+1. **Fase 1** corre sola. Revise **Reportes** en el panel; en **Categorías** cada tarjeta tiene botones **Editar / Fusionar / Ocultar**.
+2. Cuando pase la fecha de cierre: **Admin → Cerrar fase 1 y elegir oficiales**. Si hay empate en el puesto 15, marque cuáles entran y **Confirmar**.
+3. **Fase 2** corre sola en sus fechas. Al terminar: **Calcular finalistas**.
+4. **Fase 3** corre sola. Al terminar: **Ganadores** muestra una vista previa con conteos (solo admin) → **Publicar resultados**.
+
+Si quiere cerrar una fase antes, adelante su fecha de cierre en **Fechas** y luego use el botón.
+
+# Reglas que aplica la base de datos
+
+| Regla | Cómo se cumple |
 |---|---|
-| Solo personas con correo confirmado participan | Cada función revisa `email_confirmed_at` |
-| Solo correos de un dominio (opcional) | Un disparador (trigger) en el registro rechaza otros dominios. Se activa poniendo el dominio en la configuración |
-| Máximo 15 propuestas por persona | La función `propose_category` cuenta y bloquea |
-| Sin duplicados (sin mayúsculas ni tildes) | Índice único sobre el nombre normalizado: "El Más Café" = "el mas cafe!!" |
-| Máximo 15 votos, 1 por categoría | La función `vote_category` + clave primaria (persona, categoría) |
-| Quitar votos solo con la fase abierta | `unvote_category` revisa la fecha |
-| Fechas de cada fase | Todas las funciones revisan la hora del servidor (no la del celular) |
-| 15 categorías oficiales, empate lo decide el admin | `admin_close_phase1` + `admin_resolve_phase1_tie` |
-| 1 nominación por categoría, sin nominarse a sí mismo | Clave primaria + restricción `no_autonominarse` |
-| Top 3 pasan a la final | `admin_compute_finalists` |
-| 1 voto final por categoría | Tabla de comprobantes con clave primaria |
-| Voto secreto | Ver abajo |
-| Resultados ocultos hasta publicar | `get_results` no devuelve nada hasta que el admin publique |
-| Nadie escribe directo en las tablas | Row Level Security activado sin permisos de escritura; solo las funciones pueden escribir |
-| Nadie se hace admin solo | La columna `is_admin` no se puede modificar desde la web |
+| Solo correos confirmados participan | Cada función revisa la confirmación |
+| Dominio permitido (opcional) | Un disparador en el registro rechaza otros dominios |
+| Máx. 15 propuestas y 15 votos por persona, 1 voto por categoría | Funciones con conteo + clave única |
+| Sin duplicados (sin mayúsculas ni tildes) | Índice único sobre el nombre normalizado |
+| Fechas | Se usa la hora del servidor, no la del celular |
+| 15 oficiales; empate lo decide el admin | `admin_close_phase1` + `admin_resolve_phase1_tie` |
+| 1 nominación por categoría; no nominarse a sí mismo | Clave primaria + restricción |
+| Top 3 a la final (empate en el 3.er lugar: pasan todos) | `admin_compute_finalists` |
+| Voto final secreto, 1 por categoría | Ver abajo |
+| Resultados ocultos hasta publicar | `get_results` no devuelve nada antes |
+| Nadie escribe directo en las tablas ni se hace admin solo | Row Level Security sin permisos de escritura |
 
-### ¿Cómo funciona el voto secreto?
+**Voto secreto:** se guarda en dos tablas que no se pueden unir: `final_ballots` (quién ya votó, sin decir por quién)
+y `final_tally` (un contador por finalista, sin votantes ni horas). Por eso **el voto final no se puede cambiar**.
+Límite honesto: alguien con acceso al panel de Supabase podría mirar el contador en vivo mientras una persona vota; no queda ningún registro que permita averiguarlo después.
 
-La base de datos guarda el voto final en **dos lugares separados que no se pueden unir**:
+**Empate en el 1.er lugar de la final:** ganadores compartidos (una tarjeta con ambos nombres).
 
-- `final_ballots`: dice **quién ya votó** en cada categoría, pero **no por quién**.
-- `final_tally`: es un **contador** por finalista (ej. "Ana: 7 votos"), **sin nombres de votantes** y sin fecha ni hora.
+# Pruebas
 
-Por eso nadie, ni el admin ni el dueño de la base de datos, puede consultar después quién votó por quién.
-**Consecuencia:** el voto final **no se puede cambiar** una vez emitido (el sistema no sabe cuál quitar). La web lo advertirá antes de confirmar.
+- Lista de pruebas manuales: [`docs/PRUEBAS.md`](docs/PRUEBAS.md).
+- Pruebas automáticas de la base (para programadores), contra un Postgres local:
 
-**Límite honesto:** quien tenga acceso al panel de Supabase podría, en teoría, quedarse mirando el contador en vivo
-y ver qué sube justo después de que una persona vota. Eso requiere espiar en tiempo real; no queda ningún registro guardado que lo permita después.
+  ```bash
+  psql -d base_vacia -f supabase/tests/00_supabase_stub.sql
+  psql -d base_vacia -f supabase/schema.sql
+  psql -d base_vacia -f supabase/tests/10_reglas.sql
+  ```
 
-### Decisiones que tomé (se pueden cambiar si no le gustan)
+# Archivos
 
-1. **Empate en el 3.er lugar de nominaciones:** pasan todos los empatados (puede haber 4 finalistas).
-2. **Empate en el 1.er lugar de la votación final:** ganadores compartidos (dos tarjetas).
-3. **No se vale nominarse a sí mismo.** Sí se vale votar por la categoría propia en la fase 1.
-4. **Nominaciones:** se pueden cambiar mientras la fase 2 esté abierta.
-5. **Ocultar una categoría** devuelve los votos a quienes la habían votado.
-6. **Fusionar** una repetida pasa sus votos a la otra; si alguien votó por ambas, recupera un voto.
-7. **Cerrar cada fase** lo hace el admin con un botón, una vez que pasó la fecha. Si quiere cerrar antes, adelanta la fecha.
-8. Los **conteos de votos** de la fase 1 son visibles para todos. Los de nominaciones y la final, no.
-
----
-
-## Pruebas automáticas (opcional, para quien sepa programar)
-
-`supabase/tests/` tiene 70+ pruebas que simulan usuarios intentando hacer trampa
-(votar 16 veces, votar dos veces en la final, escribir directo en las tablas, etc.).
-Se corren contra un Postgres local, **no** contra Supabase:
-
-```bash
-psql -d una_base_vacia -f supabase/tests/00_supabase_stub.sql
-psql -d una_base_vacia -f supabase/schema.sql
-psql -d una_base_vacia -f supabase/tests/10_reglas.sql
-```
-
-## Vista previa del diseño
-
-`vista-previa-diseno.html` muestra cómo se verán el encabezado, la cuenta regresiva y las tarjetas (datos de ejemplo).
+| Archivo | Qué es |
+|---|---|
+| `index.html` | La página |
+| `js/app.js` | Pantallas y lógica de la web |
+| `js/config.js` | URL y llave pública de Supabase |
+| `css/estilos.css` | Diseño |
+| `img/gota.svg` | Mascota |
+| `supabase/schema.sql` | Base de datos completa |
