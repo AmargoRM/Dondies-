@@ -7,7 +7,7 @@ inspirada en los Dundies de *The Office*.
 
 - **Sin registro ni correos.** Cada celular o computadora es un "dispositivo" y los límites se cuentan por dispositivo.
 - **Límites:** 15 propuestas por dispositivo, **5 votos por día** por dispositivo, 1 voto por categoría en la final.
-- **Datos:** se guardan en un documento público gratuito de [jsonblob.com](https://jsonblob.com) (no requiere cuenta).
+- **Datos:** se guardan como mensajes firmados en 6 servidores públicos y gratuitos de la red [Nostr](https://nostr.com) a la vez (no requiere cuenta). Si algunos servidores fallan, la web sigue funcionando con los demás.
 
 ## Cómo empezar (una sola vez)
 
@@ -33,10 +33,11 @@ inspirada en los Dundies de *The Office*.
 Esta versión funciona sin cuentas, a cambio de estas limitaciones:
 
 - **El límite por dispositivo se puede saltar.** Quien abra la web en modo incógnito, borre los datos del navegador o use otro navegador cuenta como un dispositivo nuevo.
-- **Los datos no son secretos.** El documento en jsonblob.com es público para quien conozca su código; alguien con conocimientos técnicos podría leer los conteos antes de tiempo o modificarlos.
+- **Los datos no son secretos.** Los mensajes son públicos para quien conozca el código del concurso; alguien con conocimientos técnicos podría leer los conteos antes de tiempo.
+- **Nadie puede cambiar los datos de otro.** Cada dispositivo firma sus propios votos con una llave que solo él tiene, y solo la llave del organizador puede cambiar fechas, categorías o publicar resultados.
 - **El voto no es anónimo frente a alguien técnico:** cada voto queda asociado a un identificador de dispositivo, aunque ese identificador no dice de quién es.
 - **La hora es la de cada dispositivo.** Si alguien tiene mal la hora del celular, puede ver una fase distinta. El "día" de los 5 votos usa la fecha de Costa Rica.
-- **Depende de jsonblob.com,** un servicio gratuito sin garantías. Si deja de funcionar, la web muestra "No hay conexión con el servidor de datos".
+- **Depende de servidores públicos gratuitos sin garantías.** Por eso se guarda en 6 a la vez y cada visita vuelve a enviar los datos. Si todos fallaran, la web muestra "No hay conexión con los servidores".
 
 Si más adelante quiere reglas a prueba de trampas (cuentas, voto secreto real), la versión con Supabase está en el historial del repositorio (commit `79328e3`).
 
@@ -45,7 +46,8 @@ Si más adelante quiere reglas a prueba de trampas (cuentas, voto secreto real),
 | Archivo | Qué es |
 |---|---|
 | `index.html` | La página |
-| `js/app.js` | Pantallas, reglas y conexión con jsonblob.com |
+| `js/app.js` | Pantallas, reglas y conexión con los servidores |
+| `js/vendor/nostr-tools-2.25.2.js` | Librería para firmar y enviar los mensajes (licencia en `js/vendor/`) |
 | `js/tarjeta.js` | Dibuja la imagen descargable del ganador |
 | `js/config.js` | Código del concurso (opcional; si está vacío, se usa el del enlace) |
 | `css/estilos.css` | Diseño |

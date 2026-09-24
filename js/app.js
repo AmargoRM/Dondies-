@@ -1,10 +1,17 @@
 // Premios Dundies – Dirección de Aguas
-// Sin cuentas: cada dispositivo tiene un identificador propio y los límites
-// se cuentan por dispositivo. Los datos compartidos se guardan en un
-// documento JSON público en jsonblob.com (gratis, sin registro).
+// Sin cuentas: cada dispositivo tiene una llave propia y los límites se
+// cuentan por dispositivo. Los datos se guardan como mensajes firmados en
+// varios servidores públicos de la red Nostr a la vez (gratis, sin registro).
+// Cada dispositivo solo puede escribir sus propios datos, y solo el
+// organizador puede cambiar fechas y categorías.
 'use strict';
 
-const API = 'https://jsonblob.com/api/jsonBlob';
+const N = window.NostrTools;
+const RELAYS = (window.DUNDIES_CONFIG || {}).RELAYS || [
+  'wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net',
+  'wss://nostr.mom', 'wss://relay.snort.social', 'wss://offchain.pub',
+];
+const KIND = 30078; // datos de aplicación (reemplazables)
 const LIMITES = { propuestas: 15, votosDia: 5, oficiales: 15, finalistas: 3 };
 const ZONA = 'America/Costa_Rica';
 
@@ -47,10 +54,6 @@ function idAleatorio(n = 12) {
   crypto.getRandomValues(a);
   return Array.from(a, (b) => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
 }
-async function sha256(t) {
-  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
-  return Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
-}
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function leerLocal(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -83,15 +86,22 @@ async function accion(boton, fn, mensajeOk) {
 // ------------------------------------------------------------------
 // Identidad del dispositivo, sala y organizador
 // ------------------------------------------------------------------
+const esHex64 = (t) => typeof t === 'string' && /^[0-9a-f]{64}$/.test(t);
 const params = new URLSearchParams(location.search);
-const SALA = params.get('sala') || (window.DUNDIES_CONFIG || {}).SALA || '';
+const SALA = (params.get('sala') || (window.DUNDIES_CONFIG || {}).SALA || '').toLowerCase();
+const D_CONFIG = `dundies:${SALA}:config`;
+const D_DEV = `dundies:${SALA}:dev`;
 
-let DISPOSITIVO = leerLocal('dundies_dispositivo');
-if (!DISPOSITIVO) { DISPOSITIVO = idAleatorio(); guardarLocal('dundies_dispositivo', DISPOSITIVO); }
+let claveDispositivo = leerLocal('dundies_clave');
+if (!esHex64(claveDispositivo)) {
+  claveDispositivo = N.utils.bytesToHex(N.generateSecretKey());
+  guardarLocal('dundies_clave', claveDispositivo);
+}
+const DISPOSITIVO = N.getPublicKey(N.utils.hexToBytes(claveDispositivo));
 
-if (params.get('admin') && SALA) guardarLocal('dundies_admin_' + SALA, params.get('admin'));
+if (esHex64(params.get('admin')) && SALA) guardarLocal('dundies_admin_' + SALA, params.get('admin'));
 const CLAVE_ADMIN = SALA ? leerLocal('dundies_admin_' + SALA) : null;
-let esAdmin = false;
+const esAdmin = esHex64(CLAVE_ADMIN) && N.getPublicKey(N.utils.hexToBytes(CLAVE_ADMIN)) === SALA;
 
 // Quita ?admin=… de la barra de direcciones para que no se comparta por error.
 if (params.get('admin')) {
@@ -100,55 +110,139 @@ if (params.get('admin')) {
 }
 
 // ------------------------------------------------------------------
-// Almacenamiento compartido (jsonblob.com)
+// Almacenamiento compartido (servidores Nostr)
 // ------------------------------------------------------------------
+// Hay dos tipos de mensaje, ambos "reemplazables" (el más nuevo gana):
+//  * config: fechas y cambios del organizador. Solo vale si lo firma la llave del organizador.
+//  * dev:    propuestas, votos, nominaciones y reportes de UN dispositivo, firmado por él.
+const pool = new N.SimplePool();
 let doc = null;
+let eventosPropios = {};   // último mensaje publicado por este dispositivo, por tipo
+let eventoConfig = null;
+let yaReenviado = false;
+
+const texto = (v, max) => String(v ?? '').slice(0, max);
+
+function ultimoPorAutor(eventos) {
+  const m = {};
+  for (const e of eventos) if (!m[e.pubkey] || e.created_at > m[e.pubkey].created_at) m[e.pubkey] = e;
+  return m;
+}
+
+function leerJSON(e) {
+  try { const x = JSON.parse(e.content); return x && typeof x === 'object' ? x : null; } catch (err) { return null; }
+}
 
 async function leerDoc() {
-  let r;
+  let cfgEvs;
+  let devEvs;
   try {
-    r = await fetch(`${API}/${encodeURIComponent(SALA)}`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+    [cfgEvs, devEvs] = await Promise.all([
+      pool.querySync(RELAYS, { kinds: [KIND], authors: [SALA], '#d': [D_CONFIG] }, { maxWait: 7000 }),
+      pool.querySync(RELAYS, { kinds: [KIND], '#d': [D_DEV], limit: 5000 }, { maxWait: 7000 }),
+    ]);
   } catch (e) {
-    throw new Error('No hay conexión con el servidor de datos. Revise su internet.');
+    throw new Error('No hay conexión con los servidores. Revise su internet.');
   }
-  if (r.status === 404) throw new Error('No se encontró este concurso. Revise el enlace.');
-  if (!r.ok) throw new Error('El servidor de datos no respondió (' + r.status + '). Intente en un momento.');
-  const d = await r.json();
-  if (!d || d.app !== 'dundies') throw new Error('Los datos del concurso están dañados.');
-  d.cats = d.cats || {};
-  d.dev = d.dev || {};
-  d.config = d.config || {};
+  const cfgEv = ultimoPorAutor(cfgEvs)[SALA];
+  const cfg = cfgEv && leerJSON(cfgEv);
+  if (!cfg || !cfg.config) throw new Error('No se pudo cargar el concurso. Revise su internet y que el enlace esté completo.');
+  eventoConfig = cfgEv;
+
+  const d = { app: 'dundies', config: cfg.config, cats: {}, dev: {} };
+  const porAutor = ultimoPorAutor(devEvs);
+  for (const [pk, ev] of Object.entries(porAutor)) {
+    const x = leerJSON(ev);
+    if (!x) continue;
+    if (pk === DISPOSITIVO) eventosPropios.dev = ev;
+    const m = {
+      v1: {}, nom: {}, v3: {}, v3d: {}, rep: {}, cats: {},
+    };
+    for (const [dia, lista] of Object.entries(x.v1 || {})) if (Array.isArray(lista)) m.v1[texto(dia, 10)] = lista.slice(0, 20).map((i) => texto(i, 40));
+    for (const [c, n] of Object.entries(x.nom || {})) m.nom[texto(c, 40)] = texto(n, 50);
+    for (const [c, n] of Object.entries(x.v3 || {})) m.v3[texto(c, 40)] = texto(n, 60);
+    for (const [dia, n] of Object.entries(x.v3d || {})) m.v3d[texto(dia, 10)] = Number(n) || 0;
+    for (const [c, n] of Object.entries(x.rep || {})) m.rep[texto(c, 40)] = texto(n, 200);
+    // Una categoría solo vale si su código empieza con la llave de quien la propuso.
+    for (const [id, c] of Object.entries(x.cats || {}).slice(0, 15)) {
+      if (!id.startsWith(pk.slice(0, 10)) || !c) continue;
+      m.cats[id] = { n: texto(c.n, 60), r: texto(c.r, 140), i: ICONS[c.i] ? c.i : 'gota', t: texto(c.t, 30) };
+      d.cats[id] = { ...m.cats[id], d: pk, st: 'a' };
+    }
+    d.dev[pk] = m;
+  }
+  // Cambios del organizador (editar, ocultar, fusionar).
+  for (const [id, o] of Object.entries(cfg.over || {})) {
+    if (!d.cats[id] || !o) continue;
+    Object.assign(d.cats[id], {
+      n: texto(o.n, 60) || d.cats[id].n, r: texto(o.r, 140) || d.cats[id].r,
+      i: ICONS[o.i] ? o.i : d.cats[id].i, st: ['a', 'h', 'm'].includes(o.st) ? o.st : 'a', m: o.m ? texto(o.m, 40) : undefined,
+    });
+  }
+
+  // Una vez por visita, reenvía la configuración y lo propio para que no se pierdan.
+  if (!yaReenviado) {
+    yaReenviado = true;
+    const reenviar = [cfgEv].concat(eventosPropios.dev ? [eventosPropios.dev] : []);
+    if (esAdmin) reenviar.push(...Object.values(porAutor));
+    for (const e of reenviar) pool.publish(RELAYS, e).forEach((p) => p.catch(() => {}));
+  }
   return d;
 }
 
-async function escribirDoc(d) {
-  let r;
-  try {
-    r = await fetch(`${API}/${encodeURIComponent(SALA)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(d),
-    });
-  } catch (e) {
-    throw new Error('No hay conexión con el servidor de datos. Revise su internet.');
+async function publicarEvento(clave, dTag, contenido, anterior) {
+  const ahora = Math.floor(Date.now() / 1000);
+  const ev = N.finalizeEvent({
+    kind: KIND,
+    created_at: Math.max(ahora, (anterior ? anterior.created_at : 0) + 1),
+    tags: [['d', dTag]],
+    content: JSON.stringify(contenido),
+  }, N.utils.hexToBytes(clave));
+  const res = await Promise.allSettled(pool.publish(RELAYS, ev, { maxWait: 8000 }));
+  if (!res.some((r) => r.status === 'fulfilled')) {
+    throw new Error('No se pudo guardar: no hay conexión con los servidores. Revise su internet e intente de nuevo.');
   }
-  if (!r.ok) throw new Error('No se pudo guardar (' + r.status + '). Intente de nuevo.');
+  return ev;
 }
 
-// Guarda un cambio sin pisar los de otras personas: lee lo último, aplica el
-// cambio, guarda y vuelve a leer para confirmar. Si otro dispositivo guardó al
-// mismo tiempo y se perdió el cambio, lo reintenta.
-async function guardar(aplicar, confirmar) {
-  for (let intento = 0; intento < 6; intento++) {
-    const d = await leerDoc();
-    aplicar(d);
-    await escribirDoc(d);
-    await esperar(250 + Math.random() * 400);
-    const d2 = await leerDoc();
-    if (confirmar(d2)) { doc = d2; return; }
-    await esperar(300 + Math.random() * 1200);
+function contenidoDispositivo(d) {
+  const m = d.dev[DISPOSITIVO] || {};
+  const cats = {};
+  for (const [id, c] of Object.entries(d.cats)) {
+    if (c.d !== DISPOSITIVO) continue;
+    cats[id] = (m.cats && m.cats[id]) || { n: c.n, r: c.r, i: c.i, t: c.t };
   }
-  throw new Error('Mucha gente guardando a la vez. Intente de nuevo en unos segundos.');
+  return { v1: m.v1 || {}, nom: m.nom || {}, v3: m.v3 || {}, v3d: m.v3d || {}, rep: m.rep || {}, cats };
+}
+
+function contenidoConfig(d) {
+  const over = {};
+  for (const [id, c] of Object.entries(d.cats)) {
+    const base = d.dev[c.d] && d.dev[c.d].cats && d.dev[c.d].cats[id];
+    if (c.st !== 'a' || c.m || !base || c.n !== base.n || c.r !== base.r || c.i !== base.i) {
+      over[id] = { n: c.n, r: c.r, i: c.i, st: c.st, m: c.m };
+    }
+  }
+  return { config: d.config, over };
+}
+
+// Aplica un cambio sobre los datos más recientes y publica lo que cambió.
+async function guardar(aplicar) {
+  const d = await leerDoc();
+  const antesDev = JSON.stringify(contenidoDispositivo(d));
+  const antesCfg = JSON.stringify(contenidoConfig(d));
+  aplicar(d);
+  const dev = contenidoDispositivo(d);
+  if (JSON.stringify(dev) !== antesDev) {
+    eventosPropios.dev = await publicarEvento(claveDispositivo, D_DEV, dev, eventosPropios.dev);
+    d.dev[DISPOSITIVO] = { ...(d.dev[DISPOSITIVO] || {}), cats: dev.cats };
+  }
+  const cfg = contenidoConfig(d);
+  if (JSON.stringify(cfg) !== antesCfg) {
+    if (!esAdmin) throw new Error('Solo el organizador puede hacer esto.');
+    eventoConfig = await publicarEvento(CLAVE_ADMIN, D_CONFIG, cfg, eventoConfig);
+  }
+  doc = d;
 }
 
 function miDev(d) {
@@ -163,32 +257,23 @@ function miDev(d) {
 }
 
 async function crearConcurso() {
-  const clave = idAleatorio(20);
+  const clave = N.utils.bytesToHex(N.generateSecretKey());
+  const sala = N.getPublicKey(N.utils.hexToBytes(clave));
   const ahora = Date.now();
   const dia = 86400000;
   const iso = (ms) => new Date(ms).toISOString();
-  const inicial = {
-    app: 'dundies', v: 1, creado: iso(ahora),
-    adminHash: await sha256(clave),
-    config: {
-      f1s: iso(ahora), f1e: iso(ahora + 21 * dia),
-      f2s: iso(ahora + 21 * dia), f2e: iso(ahora + 28 * dia),
-      f3s: iso(ahora + 28 * dia), f3e: iso(ahora + 35 * dia),
-      publicado: false, desempate: null,
-    },
-    cats: {}, dev: {},
+  const config = {
+    f1s: iso(ahora), f1e: iso(ahora + 21 * dia),
+    f2s: iso(ahora + 21 * dia), f2e: iso(ahora + 28 * dia),
+    f3s: iso(ahora + 28 * dia), f3e: iso(ahora + 35 * dia),
+    publicado: false, desempate: null,
   };
-  const r = await fetch(API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(inicial),
-  });
-  if (!r.ok) throw new Error('No se pudo crear el concurso (' + r.status + ').');
-  const loc = r.headers.get('Location') || r.headers.get('X-jsonblob') || '';
-  const id = loc.split('/').pop();
-  if (!id) throw new Error('El servidor creó el concurso pero no devolvió su código.');
-  guardarLocal('dundies_admin_' + id, clave);
-  location.href = location.pathname + '?sala=' + encodeURIComponent(id) + '#/admin';
+  await publicarEvento(clave, `dundies:${sala}:config`, { config, over: {} }, null);
+  guardarLocal('dundies_admin_' + sala, clave);
+  if (leerLocal('dundies_admin_' + sala) !== clave) {
+    throw new Error('Este navegador no permite guardar datos (¿modo incógnito?). Use una ventana normal.');
+  }
+  location.href = location.pathname + '?sala=' + sala + '#/admin';
 }
 
 // ------------------------------------------------------------------
@@ -400,7 +485,6 @@ async function renderUnaVez() {
   clearInterval(timer);
   try {
     doc = await leerDoc();
-    esAdmin = !!CLAVE_ADMIN && (await sha256(CLAVE_ADMIN)) === doc.adminHash;
   } catch (e) {
     $nav.innerHTML = '';
     $app.innerHTML = `<div class="panel">${aviso(e.message)}<button class="boton" onclick="location.reload()">Reintentar</button></div>`;
@@ -526,7 +610,7 @@ function pCategorias() {
     const nombre = fp.nombre.value.trim();
     const porque = fp.porque.value.trim().replace(/^porque\s*/i, '');
     if (nombre.length < 3 || porque.length < 3) { toast('Complete el nombre y la frase.', true); return; }
-    const id = idAleatorio(8);
+    const id = DISPOSITIVO.slice(0, 10) + '-' + idAleatorio(6);
     accion(fp.querySelector('button[type=submit]'), async () => {
       await guardar((d) => {
         if (d.cats[id]) return;
