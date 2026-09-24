@@ -60,33 +60,35 @@ Sin esto, los enlaces de los correos (confirmar cuenta, recuperar contraseña) l
 2. **Site URL:** `https://amargorm.github.io/Dondies-/`
 3. **Redirect URLs** → **Add URL** → `https://amargorm.github.io/Dondies-/` → **Save**.
 
-## Paso 5 – Correo propio (SMTP) con Resend
+## Paso 5 – Correo propio (SMTP) con Brevo
 
-El correo que trae Supabase solo manda **2–3 correos por hora** y únicamente a miembros del proyecto.
-Para que le lleguen a todo el personal, hay que conectar un servicio de correo. Resend es gratis hasta 3 000 correos al mes.
+El correo que trae Supabase solo manda **2–3 correos por hora**. Para que le lleguen a todos
+(confirmación de cuenta y recuperar contraseña), hay que conectar un servicio de correo.
 
-**5.1 Crear la cuenta de Resend**
-1. Entre a <https://resend.com> → **Sign up**.
-2. **Domains** → **Add Domain** → escriba un dominio que usted controle (ej. `dundies.midominio.com`).
-3. Resend le muestra 3–4 registros (tipo TXT y MX). Hay que agregarlos en el lugar donde se administra ese dominio
-   (el proveedor del dominio o el departamento de TI). Cuando estén, clic en **Verify**. Puede tardar desde minutos hasta unas horas.
-   - Si no tiene un dominio propio ni acceso al de la institución, pídale a TI que agregue esos registros, o use **Brevo** (abajo), que permite enviar verificando solo una dirección de correo.
-4. **API Keys** → **Create API Key** → copie la llave (empieza con `re_`). Solo se muestra una vez.
+Como el concurso acepta correos de **cualquier proveedor** y no hay un dominio propio, use **Brevo**:
+es gratis hasta 300 correos al día y solo pide verificar **una dirección de correo** como remitente.
+
+**5.1 Crear la cuenta de Brevo**
+1. Entre a <https://www.brevo.com> → **Sign up free** y cree la cuenta.
+2. Menú de su perfil → **Senders, Domains & Dedicated IPs** → **Senders** → **Add a sender**.
+   Ponga nombre `Premios Dundies` y el correo desde el que saldrán los mensajes (ej. su Gmail). Brevo le manda un correo: ábralo y confirme.
+3. Menú de su perfil → **SMTP & API** → pestaña **SMTP**. Anote el **Login** (algo como `8a1b2c001@smtp-brevo.com`)
+   y haga clic en **Generate a new SMTP key**. Copie la llave: solo se muestra una vez.
 
 **5.2 Conectarlo en Supabase**
 1. Supabase → **Authentication** → **Emails** → pestaña **SMTP Settings** → activar **Enable Custom SMTP**.
 2. Llene:
-   - **Sender email:** `premios@dundies.midominio.com` (debe ser del dominio verificado)
+   - **Sender email:** el mismo correo que verificó en Brevo
    - **Sender name:** `Premios Dundies`
-   - **Host:** `smtp.resend.com`
-   - **Port:** `465`
-   - **Username:** `resend`
-   - **Password:** la llave `re_…`
+   - **Host:** `smtp-relay.brevo.com`
+   - **Port:** `587`
+   - **Username:** el **Login** de Brevo
+   - **Password:** la **SMTP key**
 3. **Save**.
 4. En **Authentication → Rate Limits**, suba **Rate limit for sending emails** a unos 100 por hora.
-
-**Alternativa: Brevo** (<https://www.brevo.com>, 300 correos al día gratis): **Senders, Domains & Dedicated IPs** → agregue y verifique su correo remitente;
-**SMTP & API** → **SMTP** → copie el login y genere una **SMTP key**. En Supabase: Host `smtp-relay.brevo.com`, Port `587`, Username = el login de Brevo, Password = la SMTP key.
+5. Pruebe: cree una cuenta en la web y revise que llegue el correo. **Revise también la carpeta de spam**:
+   al enviar "a nombre de" un Gmail u Hotmail, algunos correos pueden caer ahí. Si pasa mucho, avise a los participantes
+   que revisen spam, o más adelante use un dominio propio (Brevo → **Domains** → agregar y verificar).
 
 **5.3 (Opcional) Textos de los correos en español**
 Supabase → **Authentication** → **Emails** → **Templates**:
@@ -116,7 +118,7 @@ Supabase → **Authentication** → **Emails** → **Templates**:
 
 En **Admin → Fechas y dominio**:
 - Las fechas vienen puestas así: fase 1 empieza el día en que corrió el script y dura 3 semanas; luego 1 semana de nominaciones y 1 de votación final. Cámbielas y **Guardar**.
-- **Dominio:** escriba por ejemplo `aya.go.cr` para aceptar solo esos correos. Vacío = cualquier correo.
+- **Dominio:** déjelo **vacío** para aceptar correos de cualquier proveedor (Gmail, Hotmail, Yahoo, del trabajo, etc.). Así viene por defecto.
 
 ---
 
