@@ -279,10 +279,18 @@ async function crearConcurso() {
 // ------------------------------------------------------------------
 // Cálculos (todo sale del documento compartido)
 // ------------------------------------------------------------------
+// Hora de la revelación de ganadores (si no se fijó, el cierre de la votación final).
+function horaRevelacion(d = doc) {
+  return d.config.rev || d.config.f3e;
+}
+function revelado(d = doc) {
+  return !!d.config.publicado || Date.now() >= Date.parse(horaRevelacion(d));
+}
+
 function fase(d = doc) {
   const c = d.config;
   const t = Date.now();
-  if (c.publicado) return 'ganadores';
+  if (revelado(d)) return 'ganadores';
   if (t < Date.parse(c.f1s)) return 'espera';
   if (t < Date.parse(c.f1e)) return 'categorias';
   if (!oficialesListas(d)) return 'desempate';
@@ -363,22 +371,56 @@ function oficiales(d = doc) {
   return elegidas.length === cupos ? seguras.concat(elegidas) : [];
 }
 
-// Nominaciones de una categoría: nombre normalizado → nombre más usado y cantidad.
+// Uniones de nominados hechas por el organizador: en cada categoría,
+// nombre normalizado → nombre normalizado al que se une.
+function uniones(d, catId) {
+  return (d.config.alias && d.config.alias[catId]) || {};
+}
+function resolverNombre(d, catId, k) {
+  const al = uniones(d, catId);
+  let vueltas = 0;
+  while (al[k] && vueltas++ < 20) k = al[k];
+  return k;
+}
+
+// Nominaciones de una categoría: grupo (nombre normalizado, ya unido) → nombre a mostrar y cantidad.
 function nominaciones(d, catId) {
   const cuenta = {};
   for (const m of Object.values(d.dev)) {
     const nombre = m.nom && m.nom[catId];
     if (!nombre) continue;
-    const k = norm(nombre);
-    if (!k) continue;
-    cuenta[k] = cuenta[k] || { clave: k, n: 0, grafias: {} };
+    const propio = norm(nombre);
+    if (!propio) continue;
+    const k = resolverNombre(d, catId, propio);
+    cuenta[k] = cuenta[k] || { clave: k, n: 0, grafias: {}, propias: {} };
     cuenta[k].n++;
     cuenta[k].grafias[nombre] = (cuenta[k].grafias[nombre] || 0) + 1;
+    if (propio === k) cuenta[k].propias[nombre] = (cuenta[k].propias[nombre] || 0) + 1;
   }
+  // Se muestra la forma más usada del nombre "destino" de la unión (si existe).
+  const masUsada = (o) => Object.entries(o).sort((a, b) => b[1] - a[1])[0];
   return Object.values(cuenta).map((x) => ({
     clave: x.clave, n: x.n,
-    nombre: Object.entries(x.grafias).sort((a, b) => b[1] - a[1])[0][0],
+    nombre: (masUsada(x.propias) || masUsada(x.grafias))[0],
+    variantes: Object.keys(x.grafias),
   })).sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre, 'es'));
+}
+
+// Voto final de un dispositivo en una categoría, ya con las uniones aplicadas.
+function votoFinal(d, m, catId) {
+  const k = m && m.v3 && m.v3[catId];
+  return k ? resolverNombre(d, catId, k) : null;
+}
+
+// Cantidad de votos finales emitidos en una categoría (sin decir por quién).
+function votosEmitidos(d, catId) {
+  const fin = finalistas(d, catId);
+  let n = 0;
+  for (const m of Object.values(d.dev)) {
+    const k = votoFinal(d, m, catId);
+    if (k && fin.some((f) => f.clave === k)) n++;
+  }
+  return n;
 }
 
 // Finalistas: los 3 más nominados (si hay empate en el 3.er lugar, pasan todos).
@@ -395,7 +437,7 @@ function resultados(d = doc) {
     const fin = finalistas(d, c.id);
     const votos = {};
     for (const m of Object.values(d.dev)) {
-      const k = m.v3 && m.v3[c.id];
+      const k = votoFinal(d, m, c.id);
       if (k && fin.some((f) => f.clave === k)) votos[k] = (votos[k] || 0) + 1;
     }
     const max = Math.max(0, ...Object.values(votos));
@@ -422,8 +464,8 @@ function infoFase() {
     case 'nominaciones': return { titulo: 'Fase 2 · Nominaciones', texto: 'Nomine a una persona en cada categoría oficial. Cierra en:', meta: c.f2e, cta: ['#/nominar', 'Nominar'] };
     case 'pausa_2_3': return { titulo: '¡Ya hay finalistas!', texto: 'La votación final empieza en:', meta: c.f3s };
     case 'final': return { titulo: 'Fase 3 · Votación final', texto: 'Vote por su favorito en cada categoría. Cierra en:', meta: c.f3e, cta: ['#/votar', 'Votar'] };
-    case 'resultados_pendientes': return { titulo: 'Votación cerrada', texto: 'Los ganadores se anunciarán muy pronto. ¡Atentos!' };
-    case 'ganadores': return { titulo: '¡Tenemos ganadores!', texto: 'Ya se publicaron los Premios Dundies.', cta: ['#/ganadores', 'Ver ganadores'] };
+    case 'resultados_pendientes': return { titulo: 'Votación cerrada', texto: 'La revelación de los ganadores será en:', meta: horaRevelacion() };
+    case 'ganadores': return { titulo: '¡Tenemos ganadores!', texto: 'Ya se revelaron los Premios Dundies.', cta: ['#/ganadores', 'Ver ganadores'] };
     default: return { titulo: '', texto: '' };
   }
 }
@@ -556,7 +598,7 @@ function pInicio() {
     <p><b>1. Categorías</b> (${esc(fecha(c.f1s))} – ${esc(fecha(c.f1e))}): proponga hasta ${LIMITES.propuestas} categorías y vote por sus favoritas. Las ${LIMITES.oficiales} más votadas quedan oficiales.</p>
     <p><b>2. Nominaciones</b> (${esc(fecha(c.f2s))} – ${esc(fecha(c.f2e))}): escriba el nombre de una persona en cada categoría oficial. Los ${LIMITES.finalistas} más nominados pasan a la final.</p>
     <p><b>3. Votación final</b> (${esc(fecha(c.f3s))} – ${esc(fecha(c.f3e))}): un voto por categoría desde cada dispositivo.</p>
-    <p><b>4. Ganadores</b>: se publican al final, con una tarjeta descargable para cada ganador.</p></div>`;
+    <p><b>4. Ganadores</b>: se revelan a todos el ${esc(fecha(horaRevelacion()))}, con una tarjeta descargable para cada ganador. Hasta entonces nadie ve quién va ganando.</p></div>`;
   $app.innerHTML = html;
 }
 
@@ -873,11 +915,14 @@ function pVotar() {
   if (abierta) html += htmlCuenta(doc.config.f3e);
   html += `<div class="chips"><span class="chip">Votó en ${conFinal.filter((x) => mios[x.c.id]).length} de ${conFinal.length} categorías</span>
     ${abierta ? `<span class="chip">Le quedan ${Math.max(0, quedan)} votos hoy</span>` : ''}</div>
-    <p class="centro suave">Un voto por categoría desde este dispositivo, hasta ${LIMITES.votosDia} por día. Una vez enviado <b>no se puede cambiar</b>.</p>`;
+    <p class="centro suave">Un voto por categoría desde este dispositivo, hasta ${LIMITES.votosDia} por día. Una vez enviado <b>no se puede cambiar</b>.
+    Para mantener la sorpresa solo se muestra cuántos votos se han emitido en cada categoría, no quién va ganando.</p>`;
   if (abierta && quedan <= 0) html += aviso(`Ya usó sus ${LIMITES.votosDia} votos de hoy. Vuelva mañana para votar en las demás categorías.`, 'alerta');
   html += '<div class="rejilla">';
   html += conFinal.map(({ c, fin }) => {
-    const elegido = mios[c.id] && fin.find((f) => f.clave === mios[c.id]);
+    const elegido = mios[c.id] && fin.find((f) => f.clave === resolverNombre(doc, c.id, mios[c.id]));
+    const emitidos = votosEmitidos(doc, c.id);
+    const linea = `<p class="autor">🗳️ ${emitidos} ${emitidos === 1 ? 'voto emitido' : 'votos emitidos'} en esta categoría</p>`;
     let cuerpo;
     if (mios[c.id]) cuerpo = `<p class="listo">✓ Ya votó${elegido ? ' por ' + esc(elegido.nombre) : ''}.</p>`;
     else if (!abierta) cuerpo = `<p class="autor">Finalistas: ${fin.map((f) => esc(f.nombre)).join(', ')}</p>`;
@@ -885,7 +930,7 @@ function pVotar() {
       cuerpo = fin.map((f) => `<label class="opcion"><input type="radio" name="c${esc(c.id)}" value="${esc(f.clave)}"> ${esc(f.nombre)}</label>`).join('') +
         `<div class="acciones"><button class="boton" data-votar="${esc(c.id)}" ${quedan <= 0 ? 'disabled title="Ya usó sus votos de hoy"' : ''}>Votar</button></div>`;
     }
-    return htmlTarjeta(c, { cuerpo, oficial: true });
+    return htmlTarjeta(c, { cuerpo: linea + cuerpo, oficial: true });
   }).join('');
   html += '</div>';
   $app.innerHTML = html;
@@ -918,18 +963,17 @@ function pVotar() {
 // ------------------------------------------------------------------
 function pGanadores() {
   const terminado = Date.now() >= Date.parse(doc.config.f3e);
-  if (!doc.config.publicado) {
-    let html = '<h2 class="seccion">Ganadores</h2><p class="centro">Los ganadores se publicarán cuando termine la votación final.</p>';
+  if (!revelado()) {
+    let html = `<h2 class="seccion">Ganadores</h2><p class="centro fase-actual">La revelación de los ganadores será en:</p>${htmlCuenta(horaRevelacion())}`;
     if (esAdmin && terminado) {
       const res = resultados();
       html += `<div class="panel ancho"><h2>Vista previa (solo organizador)</h2>
+        <p class="suave">Nadie más ve esto. Todos verán a los ganadores automáticamente a la hora de la revelación.</p>
         <table class="tabla"><tr><th>Categoría</th><th>Finalista</th><th>Votos</th></tr>
         ${res.map((r) => r.lista.map((f) => `<tr><td>${esc(r.cat.n)}</td><td>${f.gana ? '🏆 ' : ''}${esc(f.nombre)}</td><td>${f.votos}</td></tr>`).join('')).join('')}
-        </table><div class="botones"><button class="boton" id="publicar">Publicar resultados</button></div></div>`;
+        </table></div>`;
     }
     $app.innerHTML = html;
-    const p = document.getElementById('publicar');
-    if (p) p.onclick = () => publicar(p, true);
     return;
   }
   const grupos = resultados().filter((r) => r.ganadores.length).map((r) => ({
@@ -947,7 +991,6 @@ function pGanadores() {
     </div>`).join('');
   html += '</div>';
   if (!grupos.length) html += '<p class="centro">No hubo votos en la final.</p>';
-  if (esAdmin) html += '<p class="centro"><button class="boton secundario" style="color:#fff" id="despublicar">Ocultar resultados otra vez</button></p>';
   $app.innerHTML = html;
 
   $app.querySelectorAll('[data-descargar]').forEach((b) => {
@@ -964,16 +1007,6 @@ function pGanadores() {
       setTimeout(() => URL.revokeObjectURL(a.href), 10000);
     });
   });
-  const d = document.getElementById('despublicar');
-  if (d) d.onclick = () => publicar(d, false);
-}
-
-function publicar(boton, valor) {
-  if (valor && !confirm('¿Publicar los resultados? Todos podrán ver a los ganadores.')) return;
-  accion(boton, async () => {
-    await guardar((d) => { d.config.publicado = valor; }, (d) => d.config.publicado === valor);
-    render();
-  }, valor ? '¡Resultados publicados!' : 'Resultados ocultos.');
 }
 
 // ------------------------------------------------------------------
@@ -1018,7 +1051,7 @@ function pAdmin() {
       <div><b>${votos1}</b>votos fase 1</div><div><b>${noms}</b>nominaciones</div>
       <div><b>${votos3}</b>votos finales</div><div><b>${reportes.length}</b>reportes</div>
     </div><p class="suave">Fase actual: <b>${esc(infoFase().titulo)}</b></p>
-    ${Date.now() >= Date.parse(c.f3e) ? `<div class="botones"><a class="boton" href="#/ganadores">${c.publicado ? 'Ver ganadores' : 'Revisar y publicar resultados'}</a></div>` : ''}
+    ${Date.now() >= Date.parse(c.f3e) ? `<div class="botones"><a class="boton" href="#/ganadores">${revelado() ? 'Ver ganadores' : 'Ver vista previa de resultados'}</a></div>` : ''}
     </div>
     ${empateHtml}
     <form class="panel ancho" id="ffechas"><h2>Fechas</h2>
@@ -1030,9 +1063,12 @@ function pAdmin() {
         <div><label>Fase 2 termina</label><input type="datetime-local" name="f2e" value="${toLocalInput(c.f2e)}" required></div>
         <div><label>Fase 3 empieza</label><input type="datetime-local" name="f3s" value="${toLocalInput(c.f3s)}" required></div>
         <div><label>Fase 3 termina</label><input type="datetime-local" name="f3e" value="${toLocalInput(c.f3e)}" required></div>
+        <div><label>Revelación de ganadores</label><input type="datetime-local" name="rev" value="${toLocalInput(horaRevelacion())}" required></div>
       </div>
+      <p class="ayuda">A la hora de la revelación, todos ven a los ganadores automáticamente. Debe ser igual o posterior al cierre de la fase 3.</p>
       <button class="boton" type="submit">Guardar fechas</button>
     </form>
+    ${htmlUnir()}
     <div class="panel ancho"><h2>Reportes (${reportes.length})</h2>
       ${reportes.length ? `<table class="tabla"><tr><th>Categoría</th><th>Motivo</th></tr>
         ${reportes.map((r) => `<tr><td>${esc(doc.cats[r.id].n)}</td><td>${esc(r.motivo)}</td></tr>`).join('')}</table>` : '<p class="suave">No hay reportes.</p>'}
@@ -1044,7 +1080,11 @@ function pAdmin() {
     e.preventDefault();
     const claves = ['f1s', 'f1e', 'f2s', 'f2e', 'f3s', 'f3e'];
     const v = {};
-    for (const k of claves) v[k] = new Date(ff[k].value).toISOString();
+    for (const k of claves.concat('rev')) v[k] = new Date(ff[k].value).toISOString();
+    if (Date.parse(v.rev) < Date.parse(v.f3e)) {
+      toast('La revelación debe ser igual o posterior al cierre de la fase 3.', true);
+      return;
+    }
     const t = claves.map((k) => Date.parse(v[k]));
     for (let i = 1; i < t.length; i++) {
       // Dentro de una fase: inicio < fin. Entre fases: fin ≤ inicio de la siguiente.
@@ -1067,6 +1107,67 @@ function pAdmin() {
       render();
     }, 'Categorías oficiales confirmadas.');
   };
+  activarUnir();
+}
+
+// Unir nominados: el organizador junta nombres escritos distinto que son la misma persona.
+// Se guarda en config.alias[categoría][nombre normalizado] = nombre normalizado destino.
+function htmlUnir() {
+  if (Date.now() < Date.parse(doc.config.f2s)) return '';
+  const ofi = oficiales();
+  if (!ofi.length) return '';
+  const bloques = ofi.map((c) => {
+    const grupos = nominaciones(doc, c.id);
+    const al = uniones(doc, c.id);
+    const unidas = Object.entries(al);
+    if (grupos.length < 2 && !unidas.length) return '';
+    const opciones = grupos.map((g) => `<option value="${esc(g.clave)}">${esc(g.nombre)} (${g.n})</option>`).join('');
+    return `<div class="union" data-cat="${esc(c.id)}" style="border-top:1px solid rgba(255,255,255,.15);padding-top:12px;margin-top:12px">
+      <p><b>${ICONS[c.i] || ''} ${esc(c.n)}</b></p>
+      <ul class="suave" style="margin:4px 0 8px;padding-left:20px">${grupos.map((g) => `<li>${esc(g.nombre)} — ${g.n} ${g.n === 1 ? 'nominación' : 'nominaciones'}${g.variantes.length > 1 ? ` <span class="ayuda">(escrito como: ${g.variantes.map(esc).join(', ')})</span>` : ''}</li>`).join('')}</ul>
+      ${grupos.length >= 2 ? `<div class="fechas">
+        <div><label>Unir este nombre…</label><select data-origen>${opciones}</select></div>
+        <div><label>…dentro de este</label><select data-destino>${opciones}</select></div>
+      </div><button class="boton mini" type="button" data-unir>Unir</button>` : ''}
+      ${unidas.length ? `<p class="ayuda" style="margin-top:10px">Uniones hechas:</p>${unidas.map(([o, dst]) => `<p class="ayuda">"${esc(o)}" → "${esc(dst)}" <button class="boton mini secundario" style="color:#fff" type="button" data-separar="${esc(o)}">Separar</button></p>`).join('')}` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="panel ancho"><h2>Unir nominados</h2>
+    <p class="suave">Si dos nombres son la misma persona (por ejemplo "Deivis" y "Deivis Rojas", o un apodo), únalos y sus nominaciones y votos se suman. Mayúsculas, tildes y comas ya se agrupan solos. Solo usted ve esta lista.</p>
+    ${bloques || '<p class="suave">Todavía no hay nombres para unir.</p>'}</div>`;
+}
+
+function activarUnir() {
+  $app.querySelectorAll('.union').forEach((caja) => {
+    const catId = caja.dataset.cat;
+    const unir = caja.querySelector('[data-unir]');
+    if (unir) unir.onclick = () => {
+      const origen = caja.querySelector('[data-origen]').value;
+      const dst = caja.querySelector('[data-destino]').value;
+      if (origen === dst) { toast('Elija dos nombres distintos.', true); return; }
+      const txtO = caja.querySelector('[data-origen]').selectedOptions[0].textContent;
+      const txtD = caja.querySelector('[data-destino]').selectedOptions[0].textContent;
+      if (!confirm(`¿Unir "${txtO}" dentro de "${txtD}"?\n\nSus nominaciones y votos se sumarán. Puede separarlos después.`)) return;
+      accion(unir, async () => {
+        await guardar((d) => {
+          const final = resolverNombre(d, catId, dst);
+          if (final === resolverNombre(d, catId, origen)) return;
+          d.config.alias = d.config.alias || {};
+          d.config.alias[catId] = d.config.alias[catId] || {};
+          d.config.alias[catId][resolverNombre(d, catId, origen)] = final;
+        });
+        render();
+      }, 'Nombres unidos.');
+    };
+    caja.querySelectorAll('[data-separar]').forEach((b) => {
+      b.onclick = () => accion(b, async () => {
+        await guardar((d) => {
+          if (d.config.alias && d.config.alias[catId]) delete d.config.alias[catId][b.dataset.separar];
+        });
+        render();
+      }, 'Nombres separados.');
+    });
+  });
 }
 
 // ------------------------------------------------------------------

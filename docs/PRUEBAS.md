@@ -20,8 +20,10 @@ desde una ventana de incógnito en su dispositivo (o pídale a Claude que lo pre
 | 10 | (Organizador) Editar, fusionar y ocultar | Cambian para todos (los demás lo ven al recargar o en 30 s) |
 | 11 | Poner el cierre de fase 1 en el pasado | Solo se ven 15 oficiales; si hay empate, el organizador elige |
 | 12 | Nominar escribiendo un nombre; en otro celular escribir el mismo sin tildes | Cuentan como la misma persona |
+| 12b | (Organizador) Unir nominados: unir "Deivis" dentro de "Deivis Rojas" | Aparece "Deivis Rojas — 2 nominaciones"; con **Separar** vuelve a como estaba |
 | 13 | Pasar a la votación final y votar | "✓ Ya votó por …"; no deja votar otra vez en esa categoría |
-| 14 | Abrir Ganadores antes de publicar | "Los ganadores se publicarán…" |
-| 15 | (Organizador) Tras el cierre, Ganadores → Publicar | Todos ven las tarjetas |
+| 13b | Durante la votación final, mirar una categoría | Solo dice "X votos emitidos", sin decir quién va ganando |
+| 14 | Abrir Ganadores antes de la hora de revelación | Cuenta regresiva a la revelación, sin resultados |
+| 15 | Esperar la hora de revelación (o ponerla en el pasado en Fechas) | Todos ven las tarjetas sin que nadie toque nada |
 | 16 | Descargar imagen en el celular | Se guarda un PNG con la tarjeta |
 | 17 | Abrir el enlace de organizador en otro dispositivo | Aparece la pestaña Organizador |
