@@ -475,7 +475,7 @@ function infoFase() {
     case 'categorias': return { titulo: 'Fase 1 · Categorías', texto: 'Proponga categorías y vote por sus favoritas. Cierra en:', meta: c.f1e, cta: ['#/categorias', 'Ir a las categorías'] };
     case 'desempate': return { titulo: 'Fase 1 cerrada', texto: 'Hubo un empate en el último puesto. El organizador está eligiendo las categorías oficiales.' };
     case 'pausa_1_2': return { titulo: '¡Ya hay categorías oficiales!', texto: 'Las nominaciones empiezan en:', meta: c.f2s, cta: ['#/categorias', 'Ver las oficiales'] };
-    case 'nominaciones': return { titulo: 'Fase 2 · Nominaciones', texto: 'Nomine a una persona en cada categoría oficial. Cierra en:', meta: c.f2e, cta: ['#/nominar', 'Nominar'] };
+    case 'nominaciones': return { titulo: 'Fase 2 · Nominaciones', texto: 'Nomine a quienes quiera en cada categoría oficial. Cierra en:', meta: c.f2e, cta: ['#/nominar', 'Nominar'] };
     case 'pausa_2_3': return { titulo: '¡Ya hay finalistas!', texto: 'La votación final empieza en:', meta: c.f3s };
     case 'final': return { titulo: 'Fase 3 · Votación final', texto: 'Vote por su favorito en cada categoría. Cierra en:', meta: c.f3e, cta: ['#/votar', 'Votar'] };
     case 'resultados_pendientes': return { titulo: 'Votación cerrada', texto: 'La revelación de los ganadores será en:', meta: horaRevelacion() };
@@ -863,63 +863,91 @@ function modalFusionar(c) {
 // ------------------------------------------------------------------
 // Fase 2: nominaciones
 // ------------------------------------------------------------------
+// Lista de participantes que el organizador carga para las nominaciones.
+function participantes(d = doc) {
+  const vistos = new Set();
+  const lista = [];
+  for (const n of Array.isArray(d.config.personas) ? d.config.personas : []) {
+    const nombre = texto(n, 50).trim().replace(/\s+/g, ' ');
+    const k = norm(nombre);
+    if (!k || vistos.has(k)) continue;
+    vistos.add(k);
+    lista.push(nombre);
+  }
+  return lista.sort((x, y) => x.localeCompare(y, 'es'));
+}
+
+function htmlEditorParticipantes() {
+  const lista = participantes();
+  return `<form class="panel ancho" id="fpersonas">
+    <h2>Lista de participantes (solo usted)</h2>
+    <p class="suave">Escriba un nombre por línea (nombre y apellido). Los jugadores solo podrán nominar a personas de esta lista. Puede agregar o quitar nombres cuando quiera.</p>
+    <textarea name="personas" rows="10" placeholder="Ana Pérez&#10;Beto Soto&#10;Deivis Rojas">${esc(lista.join('\n'))}</textarea>
+    <p class="ayuda">${lista.length} ${lista.length === 1 ? 'persona' : 'personas'} en la lista.</p>
+    <button class="boton" type="submit">Guardar lista</button>
+  </form>`;
+}
+
+function activarEditorParticipantes() {
+  const f = document.getElementById('fpersonas');
+  if (!f) return;
+  f.onsubmit = (e) => {
+    e.preventDefault();
+    const nombres = f.personas.value.split('\n').map((n) => n.trim().replace(/\s+/g, ' ')).filter((n) => n.length >= 2).slice(0, 500);
+    accion(f.querySelector('button[type=submit]'), async () => {
+      await guardar((d) => { d.config.personas = nombres; });
+      render();
+    }, 'Lista de participantes guardada.');
+  };
+}
+
 function pNominar() {
   const fa = fase();
   const ofi = oficiales();
+  const editor = esAdmin ? htmlEditorParticipantes() : '';
   if (!ofi.length) {
-    $app.innerHTML = '<h2 class="seccion">Nominaciones</h2><p class="centro">Las nominaciones empiezan cuando estén listas las categorías oficiales.</p>';
+    $app.innerHTML = '<h2 class="seccion">Nominaciones</h2><p class="centro">Las nominaciones empiezan cuando estén listas las categorías oficiales.</p>' + editor;
+    activarEditorParticipantes();
     return;
   }
   const abierta = fa === 'nominaciones';
   const yo = doc.dev[DISPOSITIVO];
   const hechas = ofi.filter((c) => listaNom(yo, c.id).length).length;
-  // Lista desplegable: todas las personas ya nominadas por cualquiera, en cualquier categoría
-  // (en orden alfabético, sin cantidades, para no revelar quién va adelante).
-  const personas = {};
-  for (const m of Object.values(doc.dev)) {
-    for (const c of Object.keys(m.nom || {})) {
-      for (const n of listaNom(m, c)) {
-        const k = norm(n);
-        if (!k) continue;
-        personas[k] = personas[k] || {};
-        personas[k][n] = (personas[k][n] || 0) + 1;
-      }
-    }
-  }
-  const lista = Object.entries(personas)
-    .map(([k, g]) => ({ k, nombre: Object.entries(g).sort((x, y) => y[1] - x[1])[0][0] }))
-    .sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
+  const lista = participantes();
 
   let html = `<h2 class="seccion">Nominaciones</h2>
     <p class="centro fase-actual">${esc(abierta ? infoFase().texto : fa === 'pausa_1_2' ? 'Las nominaciones todavía no empiezan.' : 'Las nominaciones están cerradas.')}</p>`;
   if (abierta) html += htmlCuenta(doc.config.f2e);
+  html += editor;
   html += `<div class="chips"><span class="chip">Nominó en ${hechas} de ${ofi.length} categorías</span></div>
-    <p class="centro suave">Puede nominar a todas las personas que quiera en cada categoría. Elija de la lista o escriba un nombre nuevo (nombre y apellido): se agregará a la lista para los demás. Puede quitar nominaciones mientras la fase esté abierta.</p>
-    <div class="rejilla">`;
+    <p class="centro suave">En cada categoría elija de la lista a la persona que quiere nominar y toque <b>Nominar</b>. Puede nominar a una, dos o a todas las que quiera. Puede quitar nominaciones mientras la fase esté abierta.</p>`;
+  if (abierta && !lista.length) html += aviso('El organizador todavía no cargó la lista de participantes. Vuelva en un rato.', 'alerta');
+  html += '<div class="rejilla">';
   html += ofi.map((c) => {
     const mias = listaNom(yo, c.id);
     const misClaves = new Set(mias.map(norm));
     const chips = mias.length
       ? `<div class="campo" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">${mias.map((n, i) => `<span class="chip" style="background:#e6f6fc;color:#145b6e;border-color:#b7dcea">${esc(n)}${abierta ? ` <button type="button" class="boton mini secundario" style="min-height:24px;padding:0 8px" data-quitar="${i}" aria-label="Quitar ${esc(n)}">✕</button>` : ''}</span>`).join('')}</div>`
       : '';
-    const opciones = lista.filter((p) => !misClaves.has(p.k)).map((p) => `<option value="${esc(p.nombre)}">${esc(p.nombre)}</option>`).join('');
-    const cuerpo = (abierta
-      ? `<form class="campo" data-cat="${esc(c.id)}">
-          <select data-elegir aria-label="Nominar en ${esc(c.n)}">
-            <option value="">— Elegir de la lista —</option>${opciones}
-            <option value="__nuevo">➕ Escribir otro nombre…</option>
-          </select>
-          <input data-nuevo class="oculto" maxlength="50" placeholder="Nombre y apellido" style="margin-top:6px">
-          <div class="acciones"><button class="boton" type="submit">Nominar</button></div></form>`
-      : '') + chips;
-    return htmlTarjeta(c, { cuerpo, para: mias.length ? `${mias.length} ${mias.length === 1 ? 'nominado' : 'nominados'}` : '', oficial: true });
+    const disponibles = lista.filter((n) => !misClaves.has(norm(n)));
+    let cuerpo = '';
+    if (abierta && lista.length) {
+      cuerpo = disponibles.length
+        ? `<form class="campo" data-cat="${esc(c.id)}">
+            <select data-elegir aria-label="Nominar en ${esc(c.n)}">
+              <option value="">— Elegir de la lista —</option>${disponibles.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}
+            </select>
+            <div class="acciones"><button class="boton" type="submit">Nominar</button></div></form>`
+        : '<p class="autor">Ya nominó a todas las personas de la lista en esta categoría.</p>';
+    }
+    return htmlTarjeta(c, { cuerpo: cuerpo + chips, para: mias.length ? `${mias.length} ${mias.length === 1 ? 'nominado' : 'nominados'}` : '', oficial: true });
   }).join('');
   html += '</div>';
   $app.innerHTML = html;
+  activarEditorParticipantes();
 
   $app.querySelectorAll('.tarjeta').forEach((t) => {
     const catId = t.dataset.id;
-    const f = t.querySelector('form[data-cat]');
     const guardarLista = (boton, cambiar, mensaje) => accion(boton, async () => {
       await guardar((d) => {
         if (fase(d) !== 'nominaciones') throw new Error('Las nominaciones ya cerraron.');
@@ -929,18 +957,14 @@ function pNominar() {
       });
       render();
     }, mensaje);
+    const f = t.querySelector('form[data-cat]');
     if (f) {
-      const sel = f.querySelector('[data-elegir]');
-      const inp = f.querySelector('[data-nuevo]');
-      sel.onchange = () => {
-        inp.classList.toggle('oculto', sel.value !== '__nuevo');
-        if (sel.value === '__nuevo') inp.focus();
-      };
       f.onsubmit = (e) => {
         e.preventDefault();
-        const valor = (sel.value === '__nuevo' ? inp.value : sel.value).trim().replace(/\s+/g, ' ');
-        if (valor.length < 2) { toast(sel.value === '__nuevo' ? 'Escriba un nombre.' : 'Elija una persona de la lista.', true); return; }
+        const valor = f.querySelector('[data-elegir]').value;
+        if (!valor) { toast('Elija una persona de la lista.', true); return; }
         guardarLista(f.querySelector('button[type=submit]'), (l) => {
+          if (!participantes().some((n) => norm(n) === norm(valor))) throw new Error('Esa persona ya no está en la lista.');
           if (l.some((n) => norm(n) === norm(valor))) throw new Error('Ya nominó a esa persona en esta categoría.');
           return l.concat(valor);
         }, 'Nominación guardada.');
