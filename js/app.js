@@ -592,6 +592,7 @@ function pInicio() {
       <span class="chip">Le quedan ${Math.max(0, LIMITES.votosDia - misVotosHoy().length)} votos hoy</span></div>`;
   }
   if (f.cta) html += `<p class="centro"><a class="boton" href="${f.cta[0]}">${esc(f.cta[1])}</a></p>`;
+  if (fase() === 'desempate' && esAdmin) html += '<p class="centro"><a class="boton" href="#/admin">Elegir desempate</a></p>';
   const c = doc.config;
   html += `<div class="panel ancho"><h2>¿Cómo funciona?</h2>
     <p>No hace falta registrarse. Cada celular o computadora puede dar <b>${LIMITES.votosDia} votos por día</b>.</p>
@@ -625,6 +626,9 @@ function pCategorias() {
     </form>` : `<div class="panel">${aviso(`Ya usó sus ${LIMITES.propuestas} propuestas en este dispositivo. Todavía puede votar.`, 'alerta')}</div>`;
   } else if (fa === 'espera') {
     html += '<p class="centro">La fase 1 todavía no empieza.</p>';
+  } else if (fa === 'desempate' && esAdmin) {
+    html += `<div class="panel">${aviso('Hay un empate en el último puesto. Usted debe elegir qué categorías completan las oficiales.', 'alerta')}
+      <a class="boton" href="#/admin">Elegir desempate</a></div>`;
   }
   html += `<div class="barra"><input id="buscar" type="search" placeholder="Buscar categoría…" value="${esc(filtro.texto)}">
     <select id="orden"><option value="votos">Más votadas</option><option value="nuevas">Más nuevas</option><option value="az">A–Z</option></select></div>
@@ -1032,6 +1036,17 @@ function pAdmin() {
   const cierre = Date.now() >= Date.parse(c.f1e) ? cierreFase1() : null;
 
   let empateHtml = '';
+  if (!cierre && Date.now() >= Date.parse(c.f1s)) {
+    const previo = cierreFase1();
+    empateHtml = `<div class="panel ancho"><h2>Cierre de la fase 1 (vista previa)</h2>
+      ${previo.cupos
+        ? `<p>Si la fase cerrara ahora, habría <b>empate en el último puesto</b>: ${previo.empatadas.length} categorías con ${previo.empatadas[0].votos} votos compiten por ${previo.cupos} ${previo.cupos === 1 ? 'cupo' : 'cupos'}:</p>
+           <ul>${previo.empatadas.map((x) => `<li>${ICONS[x.i] || ''} ${esc(x.n)}</li>`).join('')}</ul>`
+        : `<p>Si la fase cerrara ahora, no habría empate en el puesto ${LIMITES.oficiales}.</p>`}
+      <p class="suave">Los votos todavía pueden cambiar. La opción para elegir el desempate aparece aquí cuando cierre la fase 1: <b>${esc(fecha(c.f1e))}</b>.
+      Si quiere decidir antes, adelante "Fase 1 termina" en <b>Fechas</b> (más abajo) a una hora que ya pasó y guarde. Ojo: eso cierra la votación de categorías para todos.</p>
+    </div>`;
+  }
   if (cierre && cierre.cupos) {
     empateHtml = `<div class="panel ancho"><h2>Desempate de la fase 1</h2>
       <p>Hay ${cierre.empatadas.length} categorías empatadas con ${cierre.empatadas[0].votos} votos. Elija <b>${cierre.cupos}</b> para completar las ${LIMITES.oficiales} oficiales:</p>
