@@ -20,6 +20,7 @@ desde una ventana de incógnito en su dispositivo (o pídale a Claude que lo pre
 | 10 | (Organizador) Editar, fusionar y ocultar | Cambian para todos (los demás lo ven al recargar o en 30 s) |
 | 11 | Poner el cierre de fase 1 en el pasado | Solo se ven 15 oficiales; si hay empate, el organizador elige |
 | 12 | Nominar escribiendo un nombre; en otro celular escribir el mismo sin tildes | Cuentan como la misma persona |
+| 12a | Nominar a dos personas en la misma categoría; en otro celular abrir la lista | La tarjeta dice "2 nominados"; en el otro celular ambos nombres aparecen en la lista desplegable |
 | 12b | (Organizador) Unir nominados: unir "Deivis" dentro de "Deivis Rojas" | Aparece "Deivis Rojas — 2 nominaciones"; con **Separar** vuelve a como estaba |
 | 13 | Pasar a la votación final y votar | "✓ Ya votó por …"; no deja votar otra vez en esa categoría |
 | 13b | Durante la votación final, mirar una categoría | Solo dice "X votos emitidos", sin decir quién va ganando |

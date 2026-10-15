@@ -159,7 +159,10 @@ async function leerDoc() {
       v1: {}, nom: {}, v3: {}, v3d: {}, rep: {}, cats: {},
     };
     for (const [dia, lista] of Object.entries(x.v1 || {})) if (Array.isArray(lista)) m.v1[texto(dia, 10)] = lista.slice(0, 20).map((i) => texto(i, 40));
-    for (const [c, n] of Object.entries(x.nom || {})) m.nom[texto(c, 40)] = texto(n, 50);
+    for (const [c, n] of Object.entries(x.nom || {})) {
+      const lista = (Array.isArray(n) ? n : [n]).slice(0, 60).map((v) => texto(v, 50).trim()).filter(Boolean);
+      if (lista.length) m.nom[texto(c, 40)] = lista;
+    }
     for (const [c, n] of Object.entries(x.v3 || {})) m.v3[texto(c, 40)] = texto(n, 60);
     for (const [dia, n] of Object.entries(x.v3d || {})) m.v3d[texto(dia, 10)] = Number(n) || 0;
     for (const [c, n] of Object.entries(x.rep || {})) m.rep[texto(c, 40)] = texto(n, 200);
@@ -383,19 +386,30 @@ function resolverNombre(d, catId, k) {
   return k;
 }
 
+// Nombres que un dispositivo nominó en una categoría (formato viejo: un texto; nuevo: lista).
+function listaNom(m, catId) {
+  const v = m && m.nom && m.nom[catId];
+  if (!v) return [];
+  return Array.isArray(v) ? v : [v];
+}
+
 // Nominaciones de una categoría: grupo (nombre normalizado, ya unido) → nombre a mostrar y cantidad.
+// Cada dispositivo puede nominar a varias personas; cada persona suma 1 por dispositivo.
 function nominaciones(d, catId) {
   const cuenta = {};
   for (const m of Object.values(d.dev)) {
-    const nombre = m.nom && m.nom[catId];
-    if (!nombre) continue;
-    const propio = norm(nombre);
-    if (!propio) continue;
-    const k = resolverNombre(d, catId, propio);
-    cuenta[k] = cuenta[k] || { clave: k, n: 0, grafias: {}, propias: {} };
-    cuenta[k].n++;
-    cuenta[k].grafias[nombre] = (cuenta[k].grafias[nombre] || 0) + 1;
-    if (propio === k) cuenta[k].propias[nombre] = (cuenta[k].propias[nombre] || 0) + 1;
+    const vistos = new Set();
+    for (const nombre of listaNom(m, catId)) {
+      const propio = norm(nombre);
+      if (!propio) continue;
+      const k = resolverNombre(d, catId, propio);
+      if (vistos.has(k)) continue;
+      vistos.add(k);
+      cuenta[k] = cuenta[k] || { clave: k, n: 0, grafias: {}, propias: {} };
+      cuenta[k].n++;
+      cuenta[k].grafias[nombre] = (cuenta[k].grafias[nombre] || 0) + 1;
+      if (propio === k) cuenta[k].propias[nombre] = (cuenta[k].propias[nombre] || 0) + 1;
+    }
   }
   // Se muestra la forma más usada del nombre "destino" de la unión (si existe).
   const masUsada = (o) => Object.entries(o).sort((a, b) => b[1] - a[1])[0];
@@ -857,47 +871,85 @@ function pNominar() {
     return;
   }
   const abierta = fa === 'nominaciones';
-  const mias = (doc.dev[DISPOSITIVO] && doc.dev[DISPOSITIVO].nom) || {};
-  const hechas = ofi.filter((c) => mias[c.id]).length;
-  // Nombres ya usados por otros, para que se escriban igual y los votos se sumen.
-  const nombres = new Set();
-  for (const m of Object.values(doc.dev)) for (const n of Object.values(m.nom || {})) nombres.add(n);
+  const yo = doc.dev[DISPOSITIVO];
+  const hechas = ofi.filter((c) => listaNom(yo, c.id).length).length;
+  // Lista desplegable: todas las personas ya nominadas por cualquiera, en cualquier categoría
+  // (en orden alfabético, sin cantidades, para no revelar quién va adelante).
+  const personas = {};
+  for (const m of Object.values(doc.dev)) {
+    for (const c of Object.keys(m.nom || {})) {
+      for (const n of listaNom(m, c)) {
+        const k = norm(n);
+        if (!k) continue;
+        personas[k] = personas[k] || {};
+        personas[k][n] = (personas[k][n] || 0) + 1;
+      }
+    }
+  }
+  const lista = Object.entries(personas)
+    .map(([k, g]) => ({ k, nombre: Object.entries(g).sort((x, y) => y[1] - x[1])[0][0] }))
+    .sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
 
   let html = `<h2 class="seccion">Nominaciones</h2>
     <p class="centro fase-actual">${esc(abierta ? infoFase().texto : fa === 'pausa_1_2' ? 'Las nominaciones todavía no empiezan.' : 'Las nominaciones están cerradas.')}</p>`;
   if (abierta) html += htmlCuenta(doc.config.f2e);
   html += `<div class="chips"><span class="chip">Nominó en ${hechas} de ${ofi.length} categorías</span></div>
-    <p class="centro suave">Escriba nombre y apellido de una persona en cada categoría. Si ya aparece en la lista, elíjalo tal cual para que los votos se sumen. Puede cambiarlo mientras la fase esté abierta.</p>
-    <datalist id="personas">${[...nombres].sort((a, b) => a.localeCompare(b, 'es')).map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
+    <p class="centro suave">Puede nominar a todas las personas que quiera en cada categoría. Elija de la lista o escriba un nombre nuevo (nombre y apellido): se agregará a la lista para los demás. Puede quitar nominaciones mientras la fase esté abierta.</p>
     <div class="rejilla">`;
   html += ofi.map((c) => {
-    const cuerpo = abierta
-      ? `<form class="campo" data-cat="${esc(c.id)}"><input list="personas" maxlength="50" placeholder="Nombre y apellido" value="${esc(mias[c.id] || '')}" aria-label="Nominar en ${esc(c.n)}">
-          <div class="acciones"><button class="boton" type="submit">Guardar</button>${mias[c.id] ? '<button class="boton secundario" type="button" data-quitar>Quitar</button>' : ''}</div></form>`
+    const mias = listaNom(yo, c.id);
+    const misClaves = new Set(mias.map(norm));
+    const chips = mias.length
+      ? `<div class="campo" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">${mias.map((n, i) => `<span class="chip" style="background:#e6f6fc;color:#145b6e;border-color:#b7dcea">${esc(n)}${abierta ? ` <button type="button" class="boton mini secundario" style="min-height:24px;padding:0 8px" data-quitar="${i}" aria-label="Quitar ${esc(n)}">✕</button>` : ''}</span>`).join('')}</div>`
       : '';
-    return htmlTarjeta(c, { cuerpo, para: mias[c.id] || '', oficial: true });
+    const opciones = lista.filter((p) => !misClaves.has(p.k)).map((p) => `<option value="${esc(p.nombre)}">${esc(p.nombre)}</option>`).join('');
+    const cuerpo = (abierta
+      ? `<form class="campo" data-cat="${esc(c.id)}">
+          <select data-elegir aria-label="Nominar en ${esc(c.n)}">
+            <option value="">— Elegir de la lista —</option>${opciones}
+            <option value="__nuevo">➕ Escribir otro nombre…</option>
+          </select>
+          <input data-nuevo class="oculto" maxlength="50" placeholder="Nombre y apellido" style="margin-top:6px">
+          <div class="acciones"><button class="boton" type="submit">Nominar</button></div></form>`
+      : '') + chips;
+    return htmlTarjeta(c, { cuerpo, para: mias.length ? `${mias.length} ${mias.length === 1 ? 'nominado' : 'nominados'}` : '', oficial: true });
   }).join('');
   html += '</div>';
   $app.innerHTML = html;
 
-  $app.querySelectorAll('form[data-cat]').forEach((f) => {
-    const catId = f.dataset.cat;
-    const enviar = (valor) => accion(f.querySelector('button'), async () => {
+  $app.querySelectorAll('.tarjeta').forEach((t) => {
+    const catId = t.dataset.id;
+    const f = t.querySelector('form[data-cat]');
+    const guardarLista = (boton, cambiar, mensaje) => accion(boton, async () => {
       await guardar((d) => {
         if (fase(d) !== 'nominaciones') throw new Error('Las nominaciones ya cerraron.');
         const m = miDev(d);
-        if (valor) m.nom[catId] = valor; else delete m.nom[catId];
-      }, (d) => ((d.dev[DISPOSITIVO] && d.dev[DISPOSITIVO].nom && d.dev[DISPOSITIVO].nom[catId]) || '') === valor);
+        const nueva = cambiar(listaNom(m, catId).slice());
+        if (nueva.length) m.nom[catId] = nueva; else delete m.nom[catId];
+      });
       render();
-    }, valor ? 'Nominación guardada.' : 'Nominación quitada.');
-    f.onsubmit = (e) => {
-      e.preventDefault();
-      const valor = f.querySelector('input').value.trim().replace(/\s+/g, ' ');
-      if (valor.length < 2) { toast('Escriba un nombre.', true); return; }
-      enviar(valor);
-    };
-    const q = f.querySelector('[data-quitar]');
-    if (q) q.onclick = () => enviar('');
+    }, mensaje);
+    if (f) {
+      const sel = f.querySelector('[data-elegir]');
+      const inp = f.querySelector('[data-nuevo]');
+      sel.onchange = () => {
+        inp.classList.toggle('oculto', sel.value !== '__nuevo');
+        if (sel.value === '__nuevo') inp.focus();
+      };
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        const valor = (sel.value === '__nuevo' ? inp.value : sel.value).trim().replace(/\s+/g, ' ');
+        if (valor.length < 2) { toast(sel.value === '__nuevo' ? 'Escriba un nombre.' : 'Elija una persona de la lista.', true); return; }
+        guardarLista(f.querySelector('button[type=submit]'), (l) => {
+          if (l.some((n) => norm(n) === norm(valor))) throw new Error('Ya nominó a esa persona en esta categoría.');
+          return l.concat(valor);
+        }, 'Nominación guardada.');
+      };
+    }
+    t.querySelectorAll('[data-quitar]').forEach((b) => {
+      const quitar = listaNom(yo, catId)[Number(b.dataset.quitar)];
+      b.onclick = () => guardarLista(b, (l) => l.filter((n) => n !== quitar), 'Nominación quitada.');
+    });
   });
 }
 
@@ -1024,7 +1076,7 @@ function pAdmin() {
   let votos3 = 0;
   for (const m of Object.values(doc.dev)) {
     for (const l of Object.values(m.v1 || {})) votos1 += l.length;
-    noms += Object.keys(m.nom || {}).length;
+    for (const c of Object.keys(m.nom || {})) noms += listaNom(m, c).length;
     votos3 += Object.keys(m.v3 || {}).length;
   }
   const reportes = [];
