@@ -437,13 +437,12 @@ function votosEmitidos(d, catId) {
   return n;
 }
 
-// Finalistas: los 3 más nominados (si hay empate en el 3.er lugar, pasan todos).
+
+// Finalistas: todas las personas con al menos una nominación pasan a la votación final.
 function finalistas(d, catId) {
   if (Date.now() < Date.parse(d.config.f2e)) return [];
-  const lista = nominaciones(d, catId);
-  if (!lista.length) return [];
-  const corte = lista[Math.min(LIMITES.finalistas, lista.length) - 1].n;
-  return lista.filter((x) => x.n >= corte);
+  return nominaciones(d, catId).filter((x) => x.n >= 1)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 function resultados(d = doc) {
@@ -866,7 +865,7 @@ function pInicio() {
   html += `<div class="panel ancho"><h2>¿Cómo funciona?</h2>
     <p>No hace falta registrarse. Cada celular o computadora puede dar <b>${LIMITES.votosDia} votos por día</b>.</p>
     <p><b>1. Categorías</b> (${esc(fecha(c.f1s))} – ${esc(fecha(c.f1e))}): proponga hasta ${LIMITES.propuestas} categorías y vote por sus favoritas. Las ${LIMITES.oficiales} más votadas quedan oficiales.</p>
-    <p><b>2. Nominaciones</b> (${esc(fecha(c.f2s))} – ${esc(fecha(c.f2e))}): elija de la lista a quienes quiera nominar en cada categoría oficial. Los ${LIMITES.finalistas} más nominados pasan a la final.</p>
+    <p><b>2. Nominaciones</b> (${esc(fecha(c.f2s))} – ${esc(fecha(c.f2e))}): elija de la lista a quienes quiera nominar en cada categoría oficial. Todos los nominados pasan a la votación final.</p>
     <p><b>3. Votación final</b> (${esc(fecha(c.f3s))} – ${esc(fecha(c.f3e))}): un voto por categoría desde cada dispositivo.</p>
     <p><b>4. Ganadores</b>: se revelan a todos el ${esc(fecha(horaRevelacion()))}, con una tarjeta descargable para cada ganador. Hasta entonces nadie ve quién va ganando.</p></div>`;
   $app.innerHTML = html;
@@ -1177,16 +1176,23 @@ function pNominar() {
   if (abierta) html += htmlCuenta(doc.config.f2e);
   html += editor;
   html += `<div class="chips"><span class="chip">Nominó en ${hechas} de ${ofi.length} categorías</span></div>
-    <p class="centro suave">En cada categoría elija de la lista a la persona que quiere nominar y toque <b>Nominar</b>. Puede nominar a una, dos o a todas las que quiera. Puede quitar nominaciones mientras la fase esté abierta.</p>`;
+    <p class="centro suave">En cada categoría elija de la lista a la persona que quiere nominar y toque <b>Nominar</b>. Puede nominar a una, dos o a todas las que quiera. Con una sola nominación, esa persona ya pasa a la votación final, así que quien ya está nominado no aparece en la lista. Puede quitar sus propias nominaciones mientras la fase esté abierta.</p>`;
   if (abierta && !lista.length) html += aviso('El organizador todavía no cargó la lista de participantes. Vuelva en un rato.', 'alerta');
   html += '<div class="rejilla">';
   html += ofi.map((c) => {
     const mias = listaNom(yo, c.id);
-    const misClaves = new Set(mias.map(norm));
-    const chips = mias.length
-      ? `<div class="campo" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">${mias.map((n, i) => `<span class="chip" style="background:#e6f6fc;color:#145b6e;border-color:#b7dcea">${esc(n)}${abierta ? ` <button type="button" class="boton mini secundario" style="min-height:24px;padding:0 8px" data-quitar="${i}" aria-label="Quitar ${esc(n)}">✕</button>` : ''}</span>`).join('')}</div>`
-      : '';
-    const disponibles = lista.filter((n) => !misClaves.has(norm(n)));
+    // Todos los ya nominados en esta categoría (por cualquiera), sin cantidades.
+    const yaNominados = nominaciones(doc, c.id).sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
+    const tomadas = new Set(yaNominados.map((g) => g.clave));
+    const miIndice = (g) => mias.findIndex((n) => resolverNombre(doc, c.id, norm(n)) === g.clave);
+    const chips = yaNominados.length
+      ? `<p class="autor" style="margin-top:10px"><b>Ya nominados</b> (pasan a la votación final):</p>
+         <div class="campo" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px">${yaNominados.map((g) => {
+           const i = miIndice(g);
+           return `<span class="chip" style="background:#e6f6fc;color:#145b6e;border-color:#b7dcea">${esc(g.nombre)}${i >= 0 ? ' <span class="ayuda">(suya)</span>' : ''}${abierta && i >= 0 ? ` <button type="button" class="boton mini secundario" style="min-height:24px;padding:0 8px" data-quitar="${i}" aria-label="Quitar ${esc(g.nombre)}">✕</button>` : ''}</span>`;
+         }).join('')}</div>`
+      : '<p class="autor" style="margin-top:10px">Todavía nadie ha nominado en esta categoría.</p>';
+    const disponibles = lista.filter((n) => !tomadas.has(resolverNombre(doc, c.id, norm(n))));
     let cuerpo = '';
     if (abierta && lista.length) {
       cuerpo = disponibles.length
@@ -1195,9 +1201,9 @@ function pNominar() {
               <option value="">— Elegir de la lista —</option>${disponibles.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}
             </select>
             <div class="acciones"><button class="boton" type="submit">Nominar</button></div></form>`
-        : '<p class="autor">Ya nominó a todas las personas de la lista en esta categoría.</p>';
+        : '<p class="autor">Ya están nominadas todas las personas de la lista en esta categoría.</p>';
     }
-    return htmlTarjeta(c, { cuerpo: cuerpo + chips, para: mias.length ? `${mias.length} ${mias.length === 1 ? 'nominado' : 'nominados'}` : '', oficial: true });
+    return htmlTarjeta(c, { cuerpo: cuerpo + chips, para: yaNominados.length ? `${yaNominados.length} ${yaNominados.length === 1 ? 'nominado' : 'nominados'}` : '', oficial: true });
   }).join('');
   html += '</div>';
   $app.innerHTML = html;
@@ -1223,6 +1229,7 @@ function pNominar() {
         guardarLista(f.querySelector('button[type=submit]'), (l) => {
           if (!participantes().some((n) => norm(n) === norm(valor))) throw new Error('Esa persona ya no está en la lista.');
           if (l.some((n) => norm(n) === norm(valor))) throw new Error('Ya nominó a esa persona en esta categoría.');
+          if (nominaciones(doc, catId).some((g) => g.clave === resolverNombre(doc, catId, norm(valor)))) throw new Error('Esa persona ya fue nominada en esta categoría por otro jugador.');
           return l.concat(valor);
         }, 'Nominación guardada.');
       };
