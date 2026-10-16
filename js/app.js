@@ -456,8 +456,83 @@ function resultados(d = doc) {
     }
     const max = Math.max(0, ...Object.values(votos));
     const lista = fin.map((f) => ({ ...f, votos: votos[f.clave] || 0, gana: max > 0 && (votos[f.clave] || 0) === max }));
-    return { cat: c, lista, ganadores: lista.filter((f) => f.gana) };
+    const empatados = lista.filter((f) => f.gana);
+    // Empate en el 1.er lugar: se define con un reto; el organizador marca quién lo ganó.
+    if (empatados.length > 1) {
+      const elegido = d.config.retos && d.config.retos[c.id];
+      const g = empatados.find((f) => f.clave === elegido);
+      return { cat: c, lista, empatados, ganadores: g ? [g] : [], porReto: !!g, pendiente: !g };
+    }
+    return { cat: c, lista, empatados, ganadores: empatados };
   });
+}
+
+// ------------------------------------------------------------------
+// Ruleta de retos para desempatar
+// ------------------------------------------------------------------
+const RETOS_BASE = [
+  '🎤 Discurso de aceptación dramático (20 segundos). Gana el más aplaudido.',
+  '💧 Imitar a la gota mascota. Gana la mejor cara.',
+  '✊ Piedra, papel o tijera, al mejor de 3.',
+  '🕺 Baile de la victoria de 10 segundos, sin música. Gana el más aplaudido.',
+];
+function retosLista(d = doc) {
+  const l = d.config.retosLista;
+  if (!Array.isArray(l) || l.length !== 4) return RETOS_BASE;
+  return l.map((r, i) => texto(r, 120).trim() || RETOS_BASE[i]);
+}
+// El reto que sale en la ruleta es el mismo en todos los celulares (sale del código del concurso y la categoría).
+function retoDe(catId) {
+  let h = 2166136261;
+  for (const ch of `${SALA}:${catId}`) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  return h % 4;
+}
+function htmlRuleta(catId) {
+  const retos = retosLista();
+  return `<div class="ruleta-caja" data-ruleta="${esc(catId)}">
+    <div class="ruleta-puntero">▼</div>
+    <div class="ruleta">${[1, 2, 3, 4].map((n, i) => `<span style="transform:rotate(${i * 90 + 45}deg) translateY(-62px) rotate(-${i * 90 + 45}deg)">${n}</span>`).join('')}<img src="img/gota.svg" alt=""></div>
+    <ol class="retos">${retos.map((r, i) => `<li data-reto="${i}">${esc(r)}</li>`).join('')}</ol>
+    <button class="boton" type="button" data-girar>🎡 Girar la ruleta de retos</button>
+    <p class="resultado-reto"></p>
+  </div>`;
+}
+function activarRuletas() {
+  $app.querySelectorAll('[data-ruleta]').forEach((caja) => {
+    const catId = caja.dataset.ruleta;
+    const b = caja.querySelector('[data-girar]');
+    const rueda = caja.querySelector('.ruleta');
+    b.onclick = () => {
+      const i = retoDe(catId);
+      b.disabled = true;
+      caja.querySelectorAll('[data-reto]').forEach((li) => li.classList.remove('elegido'));
+      caja.querySelector('.resultado-reto').textContent = '';
+      rueda.style.transition = 'none';
+      rueda.style.transform = 'rotate(0deg)';
+      void rueda.offsetWidth;
+      rueda.style.transition = 'transform 4s cubic-bezier(.15,.9,.2,1)';
+      rueda.style.transform = `rotate(${360 * 6 + (360 - (i * 90 + 45))}deg)`;
+      setTimeout(() => {
+        caja.querySelector(`[data-reto="${i}"]`).classList.add('elegido');
+        caja.querySelector('.resultado-reto').textContent = `¡Salió el reto ${i + 1}! ${retosLista()[i]}`;
+        b.disabled = false;
+        b.textContent = '🎡 Girar otra vez';
+        confeti(caja);
+      }, 4100);
+    };
+  });
+}
+function confeti(caja) {
+  const em = ['🎉', '💧', '✨', '🏆', '🎊'];
+  for (let k = 0; k < 24; k++) {
+    const sp = document.createElement('span');
+    sp.className = 'confeti';
+    sp.textContent = em[k % em.length];
+    sp.style.left = Math.random() * 100 + '%';
+    sp.style.animationDelay = Math.random() * 0.4 + 's';
+    caja.appendChild(sp);
+    setTimeout(() => sp.remove(), 2200);
+  }
 }
 
 function votosFinalesHoy(d = doc) {
@@ -1200,28 +1275,61 @@ function pGanadores() {
       html += `<div class="panel ancho"><h2>Vista previa (solo organizador)</h2>
         <p class="suave">Nadie más ve esto. Todos verán a los ganadores automáticamente a la hora de la revelación.</p>
         <table class="tabla"><tr><th>Categoría</th><th>Finalista</th><th>Votos</th></tr>
-        ${res.map((r) => r.lista.map((f) => `<tr><td>${esc(r.cat.n)}</td><td>${f.gana ? '🏆 ' : ''}${esc(f.nombre)}</td><td>${f.votos}</td></tr>`).join('')).join('')}
-        </table></div>`;
+        ${res.map((r) => r.lista.map((f) => `<tr><td>${esc(r.cat.n)}</td><td>${f.gana ? (r.empatados.length > 1 ? '🤝 ' : '🏆 ') : ''}${esc(f.nombre)}</td><td>${f.votos}</td></tr>`).join('')).join('')}
+        </table>
+        ${res.some((r) => r.empatados.length > 1) ? `<p class="aviso alerta">🤝 = empate en el 1.er lugar. Se definirá con la ruleta de retos en la revelación: ${res.filter((r) => r.empatados.length > 1).map((r) => `<b>${esc(r.cat.n)}</b> → reto ${retoDe(r.cat.id) + 1}: ${esc(retosLista()[retoDe(r.cat.id)])}`).join('; ')}</p>` : ''}
+        </div>`;
     }
     $app.innerHTML = html;
     return;
   }
-  const grupos = resultados().filter((r) => r.ganadores.length).map((r) => ({
-    id: r.cat.id, name: r.cat.n, reason: r.cat.r, icon: r.cat.i, nombres: r.ganadores.map((g) => g.nombre),
+  const res = resultados();
+  const grupos = res.filter((r) => r.ganadores.length).map((r) => ({
+    id: r.cat.id, name: r.cat.n, reason: r.cat.r, icon: r.cat.i, nombres: r.ganadores.map((g) => g.nombre), porReto: r.porReto, empatados: r.empatados,
   }));
-  let html = '<h2 class="seccion">🏆 Ganadores 🏆</h2><p class="centro">¡Felicidades a todos los ganadores de los Premios Dundies!</p><div class="rejilla">';
+  const pendientes = res.filter((r) => r.pendiente);
+  let html = '<h2 class="seccion">🏆 Ganadores 🏆</h2><p class="centro">¡Felicidades a todos los ganadores de los Premios Dundies!</p>';
+  if (pendientes.length) {
+    html += `<h2 class="seccion">🤝 ¡Empates!</h2><p class="centro">Estas categorías se definen con un reto. Gire la ruleta para ver cuál les toca.</p><div class="rejilla">`;
+    html += pendientes.map((r) => {
+      const cuerpo = `<p class="autor"><b>Empatados:</b> ${r.empatados.map((f) => esc(f.nombre)).join(' vs. ')}</p>
+        ${htmlRuleta(r.cat.id)}
+        ${esAdmin ? `<div class="admin-fila"><span class="ayuda">Organizador: ¿quién ganó el reto?</span>${r.empatados.map((f) => `<button class="boton mini" data-gano="${esc(f.clave)}" data-cat="${esc(r.cat.id)}">Ganó ${esc(f.nombre)}</button>`).join('')}</div>` : ''}`;
+      return htmlTarjeta(r.cat, { cuerpo, para: '¡Empate!', sello: '<span class="sello empate">Empate</span>', oficial: true });
+    }).join('');
+    html += '</div><h2 class="seccion">Ganadores</h2>';
+  }
+  html += '<div class="rejilla">';
   html += grupos.map((g, i) => `<div class="tarjeta-ganador-wrap">
       <div class="ganador-marco">
         <p class="mini-titulo">PREMIOS <b>DUNDIES</b></p>
         <p class="mini-sub">Dirección de Aguas</p>
-        ${htmlTarjeta({ id: g.id, n: g.name, r: g.reason, i: g.icon, st: 'a' }, { para: g.nombres.join(' y '), sello: `<span class="sello">${g.nombres.length > 1 ? 'Ganadores' : 'Ganador'}</span>`, oficial: true })}
+        ${htmlTarjeta({ id: g.id, n: g.name, r: g.reason, i: g.icon, st: 'a' }, { para: g.nombres.join(' y '), sello: `<span class="sello">${g.porReto ? 'Ganó el reto 🎯' : g.nombres.length > 1 ? 'Ganadores' : 'Ganador'}</span>`, oficial: true,
+          cuerpo: g.porReto ? `<p class="autor">Desempate contra ${g.empatados.filter((f) => f.nombre !== g.nombres[0]).map((f) => esc(f.nombre)).join(', ')} con el reto: ${esc(retosLista()[retoDe(g.id)])}</p>` : '' })}
         <p class="lema">Porque el agua también nos une…</p>
       </div>
       <button class="boton" data-descargar="${i}">⬇ Descargar imagen</button>
+      ${g.porReto && esAdmin ? `<button class="boton mini secundario" style="color:#fff" data-deshacer="${esc(g.id)}">Deshacer resultado del reto</button>` : ''}
     </div>`).join('');
   html += '</div>';
-  if (!grupos.length) html += '<p class="centro">No hubo votos en la final.</p>';
+  if (!grupos.length && !pendientes.length) html += '<p class="centro">No hubo votos en la final.</p>';
   $app.innerHTML = html;
+  activarRuletas();
+  $app.querySelectorAll('[data-gano]').forEach((b) => {
+    b.onclick = () => {
+      if (!confirm(`¿Confirmar que ${b.textContent.replace('Ganó ', '')} ganó el reto?`)) return;
+      accion(b, async () => {
+        await guardar((d) => { d.config.retos = d.config.retos || {}; d.config.retos[b.dataset.cat] = b.dataset.gano; });
+        render();
+      }, '¡Ganador del reto guardado!');
+    };
+  });
+  $app.querySelectorAll('[data-deshacer]').forEach((b) => {
+    b.onclick = () => accion(b, async () => {
+      await guardar((d) => { if (d.config.retos) delete d.config.retos[b.dataset.deshacer]; });
+      render();
+    }, 'Resultado del reto deshecho.');
+  });
 
   $app.querySelectorAll('[data-descargar]').forEach((b) => {
     b.onclick = () => accion(b, async () => {
@@ -1311,6 +1419,11 @@ function pAdmin() {
       <button class="boton" type="submit">Guardar fechas</button>
     </form>
     ${htmlUnir()}
+    <form class="panel ancho" id="fretos"><h2>Ruleta de retos (desempate)</h2>
+      <p class="suave">Si en la votación final hay empate en el 1.er lugar, en la revelación aparece una ruleta que elige uno de estos 4 retos. Los empatados lo hacen en vivo y usted marca quién ganó en la página de Ganadores.</p>
+      ${retosLista().map((r, i) => `<label>Reto ${i + 1}</label><input name="reto${i}" maxlength="120" value="${esc(r)}">`).join('')}
+      <button class="boton" type="submit">Guardar retos</button>
+    </form>
     <div class="panel ancho"><h2>Reportes (${reportes.length})</h2>
       ${reportes.length ? `<table class="tabla"><tr><th>Categoría</th><th>Motivo</th></tr>
         ${reportes.map((r) => `<tr><td>${esc(doc.cats[r.id].n)}</td><td>${esc(r.motivo)}</td></tr>`).join('')}</table>` : '<p class="suave">No hay reportes.</p>'}
@@ -1351,6 +1464,15 @@ function pAdmin() {
   };
   activarUnir();
   activarSiguiente();
+  const fr = document.getElementById('fretos');
+  fr.onsubmit = (e) => {
+    e.preventDefault();
+    const lista = [0, 1, 2, 3].map((i) => fr[`reto${i}`].value.trim() || RETOS_BASE[i]);
+    accion(fr.querySelector('button[type=submit]'), async () => {
+      await guardar((d) => { d.config.retosLista = lista; });
+      render();
+    }, 'Retos guardados.');
+  };
 }
 
 // Unir nominados: el organizador junta nombres escritos distinto que son la misma persona.

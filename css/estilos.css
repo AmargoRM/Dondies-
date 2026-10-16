@@ -254,3 +254,23 @@ footer.pie { text-align: center; font-size: .8rem; opacity: .6; padding: 24px 16
 .ruta .ahora-toca { font-size: 1.15rem; margin: 6px 0; }
 .ruta .ahora-toca b { color: var(--dorado); }
 .aviso .boton.mini { margin-left: 6px; text-decoration: none; }
+
+/* ---------- Ruleta de retos ---------- */
+.ruleta-caja { position: relative; z-index: 3; text-align: center; margin-top: 8px; }
+.ruleta-puntero { font-size: 1.6rem; color: #e0435a; line-height: 1; margin-bottom: -10px; position: relative; z-index: 4; }
+.ruleta {
+  width: 170px; height: 170px; border-radius: 50%; margin: 6px auto 10px; position: relative;
+  background: conic-gradient(#5ccdf5 0 90deg, #f5c542 90deg 180deg, #ff8fa3 180deg 270deg, #8be3a6 270deg 360deg);
+  border: 5px solid #0a3440; box-shadow: 0 6px 16px rgba(0,0,0,.25);
+}
+.ruleta span {
+  position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px;
+  display: grid; place-items: center; font-weight: 900; font-size: 1.3rem; color: #0a3440;
+}
+.ruleta img { position: absolute; left: 50%; top: 50%; width: 46px; transform: translate(-50%, -50%); }
+.retos { text-align: left; padding-left: 22px; margin: 6px 0 10px; font-size: .88rem; color: var(--texto-suave); }
+.retos li { padding: 3px 6px; border-radius: 8px; }
+.retos li.elegido { background: #fff3c4; color: #4a3500; font-weight: 800; }
+.resultado-reto { font-weight: 900; color: var(--petroleo-3); min-height: 1.2em; }
+.confeti { position: absolute; top: 0; font-size: 1.4rem; animation: caer 2s ease-in forwards; pointer-events: none; }
+@keyframes caer { to { transform: translateY(300px) rotate(360deg); opacity: 0; } }
