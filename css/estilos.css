@@ -274,3 +274,4 @@ footer.pie { text-align: center; font-size: .8rem; opacity: .6; padding: 24px 16
 .resultado-reto { font-weight: 900; color: var(--petroleo-3); min-height: 1.2em; }
 .confeti { position: absolute; top: 0; font-size: 1.4rem; animation: caer 2s ease-in forwards; pointer-events: none; }
 @keyframes caer { to { transform: translateY(300px) rotate(360deg); opacity: 0; } }
+.animales { font-weight: 700; color: var(--texto); background: #e6f6fc; border-radius: 12px; padding: 8px 10px; }

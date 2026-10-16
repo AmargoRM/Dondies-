@@ -471,11 +471,34 @@ function resultados(d = doc) {
 // Ruleta de retos para desempatar
 // ------------------------------------------------------------------
 const RETOS_BASE = [
-  '🎤 Discurso de aceptación dramático (20 segundos). Gana el más aplaudido.',
-  '💧 Imitar a la gota mascota. Gana la mejor cara.',
+  '🎤 El peor discurso de aceptación (20 segundos). Gana el discurso MÁS malo.',
+  '🐐 Sonido de animal más ridículo: cada uno imita el animal que le tocó. Gana el más aplaudido.',
   '✊ Piedra, papel o tijera, al mejor de 3.',
   '🕺 Baile de la victoria de 10 segundos, sin música. Gana el más aplaudido.',
 ];
+const ANIMALES = [
+  '🐐 cabra', '🦆 pato', '🐔 gallina', '🐄 vaca', '🐱 gato enojado', '🐶 chihuahua', '🐒 mono',
+  '🫏 burro', '🐓 gallo', '🐷 cerdo', '🐑 oveja', '🦭 foca', '🦉 lechuza', '🐸 sapo', '🦃 pavo', '🦁 león',
+];
+function hashTexto(t) {
+  let h = 2166136261;
+  for (const ch of t) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  return h;
+}
+// ¿Este reto es el de los animales? (sirve aunque el organizador cambie el texto)
+function esRetoAnimal(texto) {
+  return norm(texto).includes('animal');
+}
+// Un animal distinto para cada empatado; igual en todos los celulares.
+function animalesPara(catId, empatados) {
+  const usados = new Set();
+  return empatados.map((f) => {
+    let i = hashTexto(`${SALA}:${catId}:${f.clave}`) % ANIMALES.length;
+    while (usados.has(i)) i = (i + 1) % ANIMALES.length;
+    usados.add(i);
+    return { nombre: f.nombre, animal: ANIMALES[i] };
+  });
+}
 function retosLista(d = doc) {
   const l = d.config.retosLista;
   if (!Array.isArray(l) || l.length !== 4) return RETOS_BASE;
@@ -483,18 +506,23 @@ function retosLista(d = doc) {
 }
 // El reto que sale en la ruleta es el mismo en todos los celulares (sale del código del concurso y la categoría).
 function retoDe(catId) {
-  let h = 2166136261;
-  for (const ch of `${SALA}:${catId}`) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
-  return h % 4;
+  return hashTexto(`${SALA}:${catId}`) % 4;
 }
-function htmlRuleta(catId) {
+function htmlAnimales(catId, empatados) {
+  return animalesPara(catId, empatados).map((a) => `<b>${esc(a.nombre)}</b>: ${esc(a.animal)}`).join(' · ');
+}
+function htmlRuleta(catId, empatados = []) {
   const retos = retosLista();
+  const i = retoDe(catId);
+  const animales = esRetoAnimal(retos[i]) && empatados.length
+    ? `<p class="animales oculto">🎲 Animales: ${htmlAnimales(catId, empatados)}</p>` : '';
   return `<div class="ruleta-caja" data-ruleta="${esc(catId)}">
     <div class="ruleta-puntero">▼</div>
     <div class="ruleta">${[1, 2, 3, 4].map((n, i) => `<span style="transform:rotate(${i * 90 + 45}deg) translateY(-62px) rotate(-${i * 90 + 45}deg)">${n}</span>`).join('')}<img src="img/gota.svg" alt=""></div>
     <ol class="retos">${retos.map((r, i) => `<li data-reto="${i}">${esc(r)}</li>`).join('')}</ol>
     <button class="boton" type="button" data-girar>🎡 Girar la ruleta de retos</button>
     <p class="resultado-reto"></p>
+    ${animales}
   </div>`;
 }
 function activarRuletas() {
@@ -507,6 +535,8 @@ function activarRuletas() {
       b.disabled = true;
       caja.querySelectorAll('[data-reto]').forEach((li) => li.classList.remove('elegido'));
       caja.querySelector('.resultado-reto').textContent = '';
+      const an0 = caja.querySelector('.animales');
+      if (an0) an0.classList.add('oculto');
       rueda.style.transition = 'none';
       rueda.style.transform = 'rotate(0deg)';
       void rueda.offsetWidth;
@@ -515,6 +545,8 @@ function activarRuletas() {
       setTimeout(() => {
         caja.querySelector(`[data-reto="${i}"]`).classList.add('elegido');
         caja.querySelector('.resultado-reto').textContent = `¡Salió el reto ${i + 1}! ${retosLista()[i]}`;
+        const an = caja.querySelector('.animales');
+        if (an) an.classList.remove('oculto');
         b.disabled = false;
         b.textContent = '🎡 Girar otra vez';
         confeti(caja);
@@ -1277,7 +1309,7 @@ function pGanadores() {
         <table class="tabla"><tr><th>Categoría</th><th>Finalista</th><th>Votos</th></tr>
         ${res.map((r) => r.lista.map((f) => `<tr><td>${esc(r.cat.n)}</td><td>${f.gana ? (r.empatados.length > 1 ? '🤝 ' : '🏆 ') : ''}${esc(f.nombre)}</td><td>${f.votos}</td></tr>`).join('')).join('')}
         </table>
-        ${res.some((r) => r.empatados.length > 1) ? `<p class="aviso alerta">🤝 = empate en el 1.er lugar. Se definirá con la ruleta de retos en la revelación: ${res.filter((r) => r.empatados.length > 1).map((r) => `<b>${esc(r.cat.n)}</b> → reto ${retoDe(r.cat.id) + 1}: ${esc(retosLista()[retoDe(r.cat.id)])}`).join('; ')}</p>` : ''}
+        ${res.some((r) => r.empatados.length > 1) ? `<p class="aviso alerta">🤝 = empate en el 1.er lugar. Se definirá con la ruleta de retos en la revelación: ${res.filter((r) => r.empatados.length > 1).map((r) => `<b>${esc(r.cat.n)}</b> → reto ${retoDe(r.cat.id) + 1}: ${esc(retosLista()[retoDe(r.cat.id)])}${esRetoAnimal(retosLista()[retoDe(r.cat.id)]) ? ` (${htmlAnimales(r.cat.id, r.empatados)})` : ''}`).join('; ')}</p>` : ''}
         </div>`;
     }
     $app.innerHTML = html;
@@ -1293,7 +1325,7 @@ function pGanadores() {
     html += `<h2 class="seccion">🤝 ¡Empates!</h2><p class="centro">Estas categorías se definen con un reto. Gire la ruleta para ver cuál les toca.</p><div class="rejilla">`;
     html += pendientes.map((r) => {
       const cuerpo = `<p class="autor"><b>Empatados:</b> ${r.empatados.map((f) => esc(f.nombre)).join(' vs. ')}</p>
-        ${htmlRuleta(r.cat.id)}
+        ${htmlRuleta(r.cat.id, r.empatados)}
         ${esAdmin ? `<div class="admin-fila"><span class="ayuda">Organizador: ¿quién ganó el reto?</span>${r.empatados.map((f) => `<button class="boton mini" data-gano="${esc(f.clave)}" data-cat="${esc(r.cat.id)}">Ganó ${esc(f.nombre)}</button>`).join('')}</div>` : ''}`;
       return htmlTarjeta(r.cat, { cuerpo, para: '¡Empate!', sello: '<span class="sello empate">Empate</span>', oficial: true });
     }).join('');
