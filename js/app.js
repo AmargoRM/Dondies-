@@ -516,12 +516,79 @@ function rutaActual() {
   const h = location.hash;
   return h.startsWith('#/') ? h.slice(2).split('?')[0] : '';
 }
+// Los 4 pasos del juego y en cuál estamos.
+const PASOS = [
+  { n: 1, nombre: 'Categorías', ruta: 'categorias', accion: 'Ir a las categorías' },
+  { n: 2, nombre: 'Nominaciones', ruta: 'nominar', accion: 'Ir a nominar' },
+  { n: 3, nombre: 'Votación final', ruta: 'votar', accion: 'Ir a votar' },
+  { n: 4, nombre: 'Ganadores', ruta: 'ganadores', accion: 'Ver ganadores' },
+];
+// Paso actual y si ya está abierto ('ahora') o todavía no ('pronto').
+function pasoActual() {
+  const c = doc.config;
+  switch (fase()) {
+    case 'espera': return { paso: PASOS[0], estado: 'pronto', desde: c.f1s };
+    case 'categorias': return { paso: PASOS[0], estado: 'ahora', hasta: c.f1e };
+    case 'desempate': return { paso: PASOS[1], estado: 'pronto', nota: 'El organizador está terminando de elegir las categorías oficiales. En un rato empiezan las nominaciones.' };
+    case 'pausa_1_2': return { paso: PASOS[1], estado: 'pronto', desde: c.f2s };
+    case 'nominaciones': return { paso: PASOS[1], estado: 'ahora', hasta: c.f2e };
+    case 'pausa_2_3': return { paso: PASOS[2], estado: 'pronto', desde: c.f3s };
+    case 'final': return { paso: PASOS[2], estado: 'ahora', hasta: c.f3e };
+    case 'resultados_pendientes': return { paso: PASOS[3], estado: 'pronto', desde: horaRevelacion() };
+    default: return { paso: PASOS[3], estado: 'ahora' };
+  }
+}
+
 function pintarNav() {
   const r = rutaActual();
-  const link = (ruta, txt) => `<a href="#/${ruta}" class="${r === ruta ? 'activo' : ''}">${txt}</a>`;
-  let html = link('', 'Inicio') + link('categorias', 'Categorías') + link('nominar', 'Nominar') + link('votar', 'Votar') + link('ganadores', 'Ganadores');
+  const actual = pasoActual();
+  const link = (ruta, txt, extra = '') => `<a href="#/${ruta}" class="${r === ruta ? 'activo' : ''} ${extra}">${txt}</a>`;
+  let html = link('', 'Inicio');
+  for (const p of PASOS) {
+    if (p.n < actual.paso.n) html += link(p.ruta, `✓ ${p.nombre}`, 'hecho');
+    else if (p.n === actual.paso.n) html += link(p.ruta, `${actual.estado === 'ahora' ? '●' : '⏳'} ${p.nombre}`, 'ahora');
+    else html += link(p.ruta, p.nombre, 'despues');
+  }
   if (esAdmin) html += link('admin', 'Organizador');
   $nav.innerHTML = `<div class="fila">${html}</div>`;
+  // Que la pestaña del paso actual quede a la vista en celulares.
+  const a = $nav.querySelector('a.ahora');
+  if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+// Recuadro "Ahora toca…" para que los jugadores sepan qué sigue.
+function htmlRuta() {
+  const actual = pasoActual();
+  const pasos = PASOS.map((p) => {
+    const est = p.n < actual.paso.n ? 'hecho' : p.n === actual.paso.n ? 'ahora' : 'despues';
+    const marca = est === 'hecho' ? '✓' : est === 'ahora' ? (actual.estado === 'ahora' ? '●' : '⏳') : p.n;
+    return `<li class="${est}"><span>${marca}</span>${esc(p.nombre)}</li>`;
+  }).join('');
+  let detalle;
+  if (actual.nota) detalle = actual.nota;
+  else if (actual.estado === 'ahora') detalle = actual.hasta ? `Está abierta hasta el ${fecha(actual.hasta)}` : '';
+  else detalle = `Empieza el ${fecha(actual.desde)}`;
+  const boton = actual.estado === 'ahora' || actual.paso.n === 4
+    ? `<a class="boton" href="#/${actual.paso.ruta}">${esc(actual.paso.accion)} →</a>` : '';
+  return `<div class="panel ancho ruta">
+    <ol class="pasos">${pasos}</ol>
+    <p class="ahora-toca">${actual.estado === 'ahora' ? 'Ahora toca' : 'Lo que sigue'}: <b>${esc(actual.paso.nombre)}</b></p>
+    ${detalle ? `<p class="suave">${esc(detalle)}</p>` : ''}
+    ${boton}
+  </div>`;
+}
+
+// En las páginas de pasos que no son el actual, avisa arriba qué toca ahora.
+function avisoOtroPaso(ruta) {
+  const pagina = PASOS.find((p) => p.ruta === ruta);
+  if (!pagina) return '';
+  const actual = pasoActual();
+  if (pagina.n === actual.paso.n) return '';
+  const estado = pagina.n < actual.paso.n ? `La fase de ${pagina.nombre} ya terminó.` : `La fase de ${pagina.nombre} todavía no empieza.`;
+  const sigue = actual.estado === 'ahora'
+    ? `Ahora toca: <b>${esc(actual.paso.nombre)}</b>.<br><a class="boton mini" style="display:inline-block;margin:8px 0 0" href="#/${actual.paso.ruta}">${esc(actual.paso.accion)} →</a>`
+    : `Lo que sigue: <b>${esc(actual.paso.nombre)}</b>${actual.desde ? ` (empieza el ${esc(fecha(actual.desde))})` : ''}.`;
+  return `<div class="aviso alerta" style="margin-top:16px">${esc(estado)} ${sigue}</div>`;
 }
 
 const RUTAS = { '': pInicio, categorias: pCategorias, nominar: pNominar, votar: pVotar, ganadores: pGanadores, admin: pAdmin };
@@ -549,6 +616,8 @@ async function renderUnaVez() {
   pintarNav();
   try {
     (RUTAS[rutaActual()] || pInicio)();
+    const avisoPaso = avisoOtroPaso(rutaActual());
+    if (avisoPaso) $app.insertAdjacentHTML('afterbegin', avisoPaso);
   } catch (e) {
     $app.innerHTML = aviso(e.message);
   }
@@ -682,8 +751,8 @@ function pInicio() {
     html += `<div class="chips"><span class="chip">Le quedan ${Math.max(0, LIMITES.propuestas - misPropuestas())} propuestas</span>
       <span class="chip">Le quedan ${Math.max(0, LIMITES.votosDia - misVotosHoy().length)} votos hoy</span></div>`;
   }
-  if (f.cta) html += `<p class="centro"><a class="boton" href="${f.cta[0]}">${esc(f.cta[1])}</a></p>`;
-  html += htmlSiguiente();
+  html += htmlRuta();
+  if (fase() === 'desempate' && esAdmin) html += '<p class="centro"><a class="boton" href="#/admin">Elegir desempate</a></p>';
   const c = doc.config;
   html += `<div class="panel ancho"><h2>¿Cómo funciona?</h2>
     <p>No hace falta registrarse. Cada celular o computadora puede dar <b>${LIMITES.votosDia} votos por día</b>.</p>
@@ -692,7 +761,6 @@ function pInicio() {
     <p><b>3. Votación final</b> (${esc(fecha(c.f3s))} – ${esc(fecha(c.f3e))}): un voto por categoría desde cada dispositivo.</p>
     <p><b>4. Ganadores</b>: se revelan a todos el ${esc(fecha(horaRevelacion()))}, con una tarjeta descargable para cada ganador. Hasta entonces nadie ve quién va ganando.</p></div>`;
   $app.innerHTML = html;
-  activarSiguiente();
 }
 
 // ------------------------------------------------------------------
@@ -703,7 +771,9 @@ let filtro = { texto: '', orden: 'votos' };
 function pCategorias() {
   const fa = fase();
   const abierta = fa === 'categorias';
-  let html = `<h2 class="seccion">Categorías</h2><p class="centro fase-actual">${esc(infoFase().texto)}</p>${abierta ? htmlCuenta(doc.config.f1e) : ''}`;
+  const subtitulo = abierta ? infoFase().texto
+    : fa === 'espera' ? '' : oficiales().length ? (oficiales().length === 1 ? 'Esta es la categoría oficial.' : `Estas son las ${oficiales().length} categorías oficiales.`) : '';
+  let html = `<h2 class="seccion">Categorías</h2>${subtitulo ? `<p class="centro fase-actual">${esc(subtitulo)}</p>` : ''}${abierta ? htmlCuenta(doc.config.f1e) : ''}`;
   if (abierta) {
     html += '<div class="chips" id="chips"></div>';
     html += misPropuestas() < LIMITES.propuestas ? `<form class="panel ancho" id="fprop">

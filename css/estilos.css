@@ -232,3 +232,25 @@ dialog .panel { margin: 0; max-width: none; border: 0; }
 #toast.error { background: #ffe1e1; color: #8a1f1f; }
 .cargando { text-align: center; padding: 40px; opacity: .8; }
 footer.pie { text-align: center; font-size: .8rem; opacity: .6; padding: 24px 16px 40px; }
+
+/* ---------- Ruta del juego (qué sigue) ---------- */
+.nav a.hecho { opacity: .65; }
+.nav a.despues { opacity: .45; }
+.nav a.ahora:not(.activo) { border: 2px solid var(--dorado); color: var(--blanco); }
+.ruta { text-align: center; border-color: var(--dorado); }
+.ruta .pasos {
+  list-style: none; padding: 0; margin: 0 0 14px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+}
+.ruta .pasos li { font-size: .75rem; font-weight: 700; opacity: .5; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ruta .pasos li span {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  border: 2px solid rgba(255,255,255,.35); font-size: .95rem;
+}
+.ruta .pasos li.hecho { opacity: .8; }
+.ruta .pasos li.hecho span { background: var(--celeste); color: var(--petroleo); border-color: var(--celeste); }
+.ruta .pasos li.ahora { opacity: 1; color: var(--dorado); }
+.ruta .pasos li.ahora span { border-color: var(--dorado); background: rgba(245,197,66,.18); }
+.ruta .ahora-toca { font-size: 1.15rem; margin: 6px 0; }
+.ruta .ahora-toca b { color: var(--dorado); }
+.aviso .boton.mini { margin-left: 6px; text-decoration: none; }
