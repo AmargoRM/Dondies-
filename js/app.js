@@ -569,7 +569,8 @@ function htmlRuta() {
   else if (actual.estado === 'ahora') detalle = actual.hasta ? `Está abierta hasta el ${fecha(actual.hasta)}` : '';
   else detalle = `Empieza el ${fecha(actual.desde)}`;
   const boton = actual.estado === 'ahora' || actual.paso.n === 4
-    ? `<a class="boton" href="#/${actual.paso.ruta}">${esc(actual.paso.accion)} →</a>` : '';
+    ? `<a class="boton" href="#/${actual.paso.ruta}">${esc(actual.paso.accion)} →</a>`
+    : `<a class="boton secundario" style="color:#fff" href="#/${actual.paso.ruta}">Ver ${esc(actual.paso.nombre)} →</a>`;
   return `<div class="panel ancho ruta">
     <ol class="pasos">${pasos}</ol>
     <p class="ahora-toca">${actual.estado === 'ahora' ? 'Ahora toca' : 'Lo que sigue'}: <b>${esc(actual.paso.nombre)}</b></p>
@@ -585,9 +586,10 @@ function avisoOtroPaso(ruta) {
   const actual = pasoActual();
   if (pagina.n === actual.paso.n) return '';
   const estado = pagina.n < actual.paso.n ? `La fase de ${pagina.nombre} ya terminó.` : `La fase de ${pagina.nombre} todavía no empieza.`;
+  const boton = (txt) => `<br><a class="boton mini" style="display:inline-block;margin:8px 0 0" href="#/${actual.paso.ruta}">${esc(txt)} →</a>`;
   const sigue = actual.estado === 'ahora'
-    ? `Ahora toca: <b>${esc(actual.paso.nombre)}</b>.<br><a class="boton mini" style="display:inline-block;margin:8px 0 0" href="#/${actual.paso.ruta}">${esc(actual.paso.accion)} →</a>`
-    : `Lo que sigue: <b>${esc(actual.paso.nombre)}</b>${actual.desde ? ` (empieza el ${esc(fecha(actual.desde))})` : ''}.`;
+    ? `Ahora toca: <b>${esc(actual.paso.nombre)}</b>.${boton(actual.paso.accion)}`
+    : `Lo que sigue: <b>${esc(actual.paso.nombre)}</b>${actual.desde ? ` (empieza el ${esc(fecha(actual.desde))})` : ''}.${boton('Ver ' + actual.paso.nombre)}`;
   return `<div class="aviso alerta" style="margin-top:16px">${esc(estado)} ${sigue}</div>`;
 }
 
