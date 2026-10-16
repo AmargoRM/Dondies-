@@ -17,6 +17,7 @@ inspirada en los Dundies de *The Office*.
    - **Para compartir con todos**: mándelo por WhatsApp o correo.
    - **Su enlace de organizador**: guárdelo en privado. Sirve para entrar como organizador desde otro dispositivo.
 4. Ajuste las **fechas** de cada fase en el mismo panel.
+5. Para avanzar sin esperar las fechas, use el botón **➡️ Siguiente fase** que aparece solo al organizador en **Inicio** y en **Organizador**. Cierra la fase actual y abre la siguiente en ese momento (pide confirmación). Cerrar la votación final antes de tiempo **no** revela los ganadores; para eso hay un paso aparte, **Revelar los ganadores ahora**.
 
 ## Fases
 

@@ -598,6 +598,83 @@ function buscarParecidas(nombre, lista) {
 // ------------------------------------------------------------------
 // Inicio
 // ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// Botón "Siguiente fase" (solo organizador)
+// ------------------------------------------------------------------
+// Según la fase actual, dice qué pasa al tocarlo y qué fechas cambia.
+function siguientePaso() {
+  const c = doc.config;
+  const ahoraIso = () => new Date().toISOString();
+  const futuro = (iso) => Date.parse(iso) > Date.now();
+  switch (fase()) {
+    case 'espera': return {
+      boton: 'Empezar la fase 1 (Categorías) ahora',
+      confirma: 'La fase 1 (proponer y votar categorías) empieza ya para todos.',
+      aplicar: (x) => { x.f1s = ahoraIso(); },
+    };
+    case 'categorias': return {
+      boton: 'Cerrar fase 1 y pasar a Nominaciones',
+      confirma: 'Se cierra la votación de categorías para todos (nadie podrá proponer ni votar más) y empiezan las nominaciones.',
+      aplicar: (x) => { x.f1e = ahoraIso(); if (futuro(x.f2s)) x.f2s = x.f1e; },
+    };
+    case 'desempate': return { irA: '#/admin', boton: 'Elegir desempate para continuar' };
+    case 'pausa_1_2': return {
+      boton: 'Abrir Nominaciones ahora',
+      confirma: 'Las nominaciones empiezan ya para todos.',
+      aplicar: (x) => { x.f2s = ahoraIso(); },
+    };
+    case 'nominaciones': return {
+      boton: 'Cerrar nominaciones y pasar a la Votación final',
+      confirma: 'Se cierran las nominaciones para todos (nadie podrá nominar ni quitar nominaciones), se calculan los finalistas y empieza la votación final.',
+      aplicar: (x) => { x.f2e = ahoraIso(); if (futuro(x.f3s)) x.f3s = x.f2e; },
+    };
+    case 'pausa_2_3': return {
+      boton: 'Abrir la Votación final ahora',
+      confirma: 'La votación final empieza ya para todos.',
+      aplicar: (x) => { x.f3s = ahoraIso(); },
+    };
+    case 'final': return {
+      boton: 'Cerrar la Votación final',
+      confirma: `Se cierra la votación final para todos (nadie podrá votar más). Los ganadores se siguen revelando en la hora fijada: ${fecha(horaRevelacion())}.`,
+      // Se guarda la hora de revelación actual para que cerrar antes NO revele los ganadores antes de tiempo.
+      aplicar: (x) => { x.rev = horaRevelacion(); x.f3e = ahoraIso(); },
+    };
+    case 'resultados_pendientes': return {
+      boton: 'Revelar los ganadores ahora',
+      confirma: 'TODOS verán a los ganadores en este momento. Esto no se puede deshacer: quien ya los vio, ya los vio.',
+      aplicar: (x) => { x.rev = ahoraIso(); },
+    };
+    default: return null;
+  }
+}
+
+function htmlSiguiente() {
+  if (!esAdmin) return '';
+  const p = siguientePaso();
+  if (!p) return '';
+  const boton = p.irA
+    ? `<a class="boton" href="${p.irA}">➡️ ${esc(p.boton)}</a>`
+    : `<button class="boton" type="button" data-siguiente>➡️ ${esc(p.boton)}</button>`;
+  return `<div class="panel ancho" style="border-color:var(--dorado)"><h2>Organizador: siguiente paso</h2>
+    <p class="suave">Fase actual: <b>${esc(infoFase().titulo)}</b>. Si no toca nada, el juego avanza solo según las fechas.</p>
+    ${boton}</div>`;
+}
+
+function activarSiguiente() {
+  const b = $app.querySelector('[data-siguiente]');
+  if (!b) return;
+  b.onclick = () => {
+    const p = siguientePaso();
+    if (!p || !p.aplicar) return;
+    if (!confirm(`${p.boton}\n\n${p.confirma}\n\n¿Continuar?`)) return;
+    accion(b, async () => {
+      await guardar((d) => p.aplicar(d.config));
+      location.hash = '#/';
+      render();
+    }, '¡Listo! El juego avanzó a la siguiente fase.');
+  };
+}
+
 function pInicio() {
   const f = infoFase();
   let html = `<h2 class="seccion">${esc(f.titulo)}</h2><p class="centro fase-actual">${esc(f.texto)}</p>${htmlCuenta(f.meta)}`;
@@ -606,15 +683,16 @@ function pInicio() {
       <span class="chip">Le quedan ${Math.max(0, LIMITES.votosDia - misVotosHoy().length)} votos hoy</span></div>`;
   }
   if (f.cta) html += `<p class="centro"><a class="boton" href="${f.cta[0]}">${esc(f.cta[1])}</a></p>`;
-  if (fase() === 'desempate' && esAdmin) html += '<p class="centro"><a class="boton" href="#/admin">Elegir desempate</a></p>';
+  html += htmlSiguiente();
   const c = doc.config;
   html += `<div class="panel ancho"><h2>¿Cómo funciona?</h2>
     <p>No hace falta registrarse. Cada celular o computadora puede dar <b>${LIMITES.votosDia} votos por día</b>.</p>
     <p><b>1. Categorías</b> (${esc(fecha(c.f1s))} – ${esc(fecha(c.f1e))}): proponga hasta ${LIMITES.propuestas} categorías y vote por sus favoritas. Las ${LIMITES.oficiales} más votadas quedan oficiales.</p>
-    <p><b>2. Nominaciones</b> (${esc(fecha(c.f2s))} – ${esc(fecha(c.f2e))}): escriba el nombre de una persona en cada categoría oficial. Los ${LIMITES.finalistas} más nominados pasan a la final.</p>
+    <p><b>2. Nominaciones</b> (${esc(fecha(c.f2s))} – ${esc(fecha(c.f2e))}): elija de la lista a quienes quiera nominar en cada categoría oficial. Los ${LIMITES.finalistas} más nominados pasan a la final.</p>
     <p><b>3. Votación final</b> (${esc(fecha(c.f3s))} – ${esc(fecha(c.f3e))}): un voto por categoría desde cada dispositivo.</p>
     <p><b>4. Ganadores</b>: se revelan a todos el ${esc(fecha(horaRevelacion()))}, con una tarjeta descargable para cada ganador. Hasta entonces nadie ve quién va ganando.</p></div>`;
   $app.innerHTML = html;
+  activarSiguiente();
 }
 
 // ------------------------------------------------------------------
@@ -1131,6 +1209,7 @@ function pAdmin() {
   }
 
   $app.innerHTML = `<h2 class="seccion">Panel del organizador</h2>
+    ${htmlSiguiente()}
     <div class="panel ancho"><h2>Enlaces</h2>
       <p><b>Para compartir con todos:</b></p><input readonly value="${esc(enlace)}" onclick="this.select()">
       <p style="margin-top:14px"><b>Su enlace de organizador</b> (guárdelo y no lo comparta; sirve para entrar como organizador desde otro dispositivo):</p>
@@ -1199,6 +1278,7 @@ function pAdmin() {
     }, 'Categorías oficiales confirmadas.');
   };
   activarUnir();
+  activarSiguiente();
 }
 
 // Unir nominados: el organizador junta nombres escritos distinto que son la misma persona.
