@@ -6,7 +6,7 @@ inspirada en los Dundies de *The Office*.
 **Web:** <https://amargorm.github.io/Dondies-/>
 
 - **Sin registro ni correos.** Cada celular o computadora es un "dispositivo" y los límites se cuentan por dispositivo.
-- **Límites:** 15 propuestas por dispositivo, **5 votos por día** por dispositivo, 1 voto por categoría en la final.
+- **Límites:** 15 propuestas por dispositivo, **votos por día** por dispositivo (5 si el organizador no lo cambia en **Organizador → Votos por día**; vale para la votación de categorías y la final), 1 voto por categoría en la final.
 - **Datos:** se guardan como mensajes firmados en 6 servidores públicos y gratuitos de la red [Nostr](https://nostr.com) a la vez (no requiere cuenta). Si algunos servidores fallan, la web sigue funcionando con los demás.
 
 ## Cómo empezar (una sola vez)

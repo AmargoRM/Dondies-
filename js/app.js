@@ -13,6 +13,11 @@ const RELAYS = (window.DUNDIES_CONFIG || {}).RELAYS || [
 ];
 const KIND = 30078; // datos de aplicación (reemplazables)
 const LIMITES = { propuestas: 15, votosDia: 5, oficiales: 15, finalistas: 3 };
+// Votos por día por dispositivo: lo fija el organizador (si no, 5).
+function votosDia(d) {
+  const n = Number(((d || doc) && (d || doc).config && (d || doc).config.votosDia));
+  return Number.isInteger(n) && n >= 1 && n <= 100 ? n : LIMITES.votosDia;
+}
 const ZONA = 'America/Costa_Rica';
 
 const ICONS = {
@@ -158,7 +163,7 @@ async function leerDoc() {
     const m = {
       v1: {}, nom: {}, v3: {}, v3d: {}, rep: {}, cats: {},
     };
-    for (const [dia, lista] of Object.entries(x.v1 || {})) if (Array.isArray(lista)) m.v1[texto(dia, 10)] = lista.slice(0, 20).map((i) => texto(i, 40));
+    for (const [dia, lista] of Object.entries(x.v1 || {})) if (Array.isArray(lista)) m.v1[texto(dia, 10)] = lista.slice(0, 100).map((i) => texto(i, 40));
     for (const [c, n] of Object.entries(x.nom || {})) {
       const lista = (Array.isArray(n) ? n : [n]).slice(0, 60).map((v) => texto(v, 50).trim()).filter(Boolean);
       if (lista.length) m.nom[texto(c, 40)] = lista;
@@ -857,13 +862,13 @@ function pInicio() {
   let html = `<h2 class="seccion">${esc(f.titulo)}</h2><p class="centro fase-actual">${esc(f.texto)}</p>${htmlCuenta(f.meta)}`;
   if (fase() === 'categorias') {
     html += `<div class="chips"><span class="chip">Le quedan ${Math.max(0, LIMITES.propuestas - misPropuestas())} propuestas</span>
-      <span class="chip">Le quedan ${Math.max(0, LIMITES.votosDia - misVotosHoy().length)} votos hoy</span></div>`;
+      <span class="chip">Le quedan ${Math.max(0, votosDia() - misVotosHoy().length)} votos hoy</span></div>`;
   }
   html += htmlRuta();
   if (fase() === 'desempate' && esAdmin) html += '<p class="centro"><a class="boton" href="#/admin">Elegir desempate</a></p>';
   const c = doc.config;
   html += `<div class="panel ancho"><h2>¿Cómo funciona?</h2>
-    <p>No hace falta registrarse. Cada celular o computadora puede dar <b>${LIMITES.votosDia} votos por día</b>.</p>
+    <p>No hace falta registrarse. Cada celular o computadora puede dar <b>${votosDia()} votos por día</b>.</p>
     <p><b>1. Categorías</b> (${esc(fecha(c.f1s))} – ${esc(fecha(c.f1e))}): proponga hasta ${LIMITES.propuestas} categorías y vote por sus favoritas. Las ${LIMITES.oficiales} más votadas quedan oficiales.</p>
     <p><b>2. Nominaciones</b> (${esc(fecha(c.f2s))} – ${esc(fecha(c.f2e))}): elija de la lista a quienes quiera nominar en cada categoría oficial. Todos los nominados pasan a la votación final.</p>
     <p><b>3. Votación final</b> (${esc(fecha(c.f3s))} – ${esc(fecha(c.f3e))}): un voto por categoría desde cada dispositivo.</p>
@@ -943,7 +948,7 @@ function pCategorias() {
 
 function pintarRejilla() {
   const abierta = fase() === 'categorias';
-  const quedan = LIMITES.votosDia - misVotosHoy().length;
+  const quedan = votosDia() - misVotosHoy().length;
   const chips = document.getElementById('chips');
   if (chips) {
     chips.innerHTML = `<span class="chip">Le quedan ${Math.max(0, LIMITES.propuestas - misPropuestas())} propuestas</span>
@@ -1012,7 +1017,7 @@ async function accionCategoria(btn, act, c) {
         if (!destino(d, c.id)) throw new Error('Esa categoría ya no está disponible.');
         const hoyLista = misVotosHoy(d);
         if (hoyLista.includes(c.id)) return;
-        if (hoyLista.length >= LIMITES.votosDia) throw new Error(`Ya usó sus ${LIMITES.votosDia} votos de hoy. Vuelva mañana.`);
+        if (hoyLista.length >= votosDia(d)) throw new Error(`Ya usó sus ${votosDia(d)} votos de hoy. Vuelva mañana.`);
         const m = miDev(d);
         m.v1[dia] = (m.v1[dia] || []).concat(c.id);
       }, (d) => misVotosHoy(d).includes(c.id));
@@ -1253,15 +1258,15 @@ function pVotar() {
   }
   const abierta = fa === 'final';
   const mios = (doc.dev[DISPOSITIVO] && doc.dev[DISPOSITIVO].v3) || {};
-  const quedan = LIMITES.votosDia - votosFinalesHoy();
+  const quedan = votosDia() - votosFinalesHoy();
   let html = `<h2 class="seccion">Votación final</h2>
     <p class="centro fase-actual">${esc(abierta ? infoFase().texto : fa === 'pausa_2_3' ? 'La votación final todavía no empieza.' : 'La votación final está cerrada.')}</p>`;
   if (abierta) html += htmlCuenta(doc.config.f3e);
   html += `<div class="chips"><span class="chip">Votó en ${conFinal.filter((x) => mios[x.c.id]).length} de ${conFinal.length} categorías</span>
     ${abierta ? `<span class="chip">Le quedan ${Math.max(0, quedan)} votos hoy</span>` : ''}</div>
-    <p class="centro suave">Un voto por categoría desde este dispositivo, hasta ${LIMITES.votosDia} por día. Una vez enviado <b>no se puede cambiar</b>.
+    <p class="centro suave">Un voto por categoría desde este dispositivo, hasta ${votosDia()} por día. Una vez enviado <b>no se puede cambiar</b>.
     Para mantener la sorpresa solo se muestra cuántos votos se han emitido en cada categoría, no quién va ganando.</p>`;
-  if (abierta && quedan <= 0) html += aviso(`Ya usó sus ${LIMITES.votosDia} votos de hoy. Vuelva mañana para votar en las demás categorías.`, 'alerta');
+  if (abierta && quedan <= 0) html += aviso(`Ya usó sus ${votosDia()} votos de hoy. Vuelva mañana para votar en las demás categorías.`, 'alerta');
   html += '<div class="rejilla">';
   html += conFinal.map(({ c, fin }) => {
     const elegido = mios[c.id] && fin.find((f) => f.clave === resolverNombre(doc, c.id, mios[c.id]));
@@ -1292,7 +1297,7 @@ function pVotar() {
           const m = miDev(d);
           if (m.v3[catId]) return;
           if (fase(d) !== 'final') throw new Error('La votación final no está abierta.');
-          if ((m.v3d[dia] || 0) >= LIMITES.votosDia) throw new Error(`Ya usó sus ${LIMITES.votosDia} votos de hoy. Vuelva mañana.`);
+          if ((m.v3d[dia] || 0) >= votosDia(d)) throw new Error(`Ya usó sus ${votosDia(d)} votos de hoy. Vuelva mañana.`);
           m.v3[catId] = radio.value;
           m.v3d[dia] = (m.v3d[dia] || 0) + 1;
         }, (d) => !!(d.dev[DISPOSITIVO] && d.dev[DISPOSITIVO].v3 && d.dev[DISPOSITIVO].v3[catId]));
@@ -1457,6 +1462,12 @@ function pAdmin() {
       <p class="ayuda">A la hora de la revelación, todos ven a los ganadores automáticamente. Debe ser igual o posterior al cierre de la fase 3.</p>
       <button class="boton" type="submit">Guardar fechas</button>
     </form>
+    <form class="panel ancho" id="fvotos"><h2>Votos por día</h2>
+      <p class="suave">Cuántos votos puede dar cada dispositivo por día (fecha de Costa Rica). Vale para la votación de categorías y para la votación final. El cambio aplica de inmediato, también para los votos de hoy.</p>
+      <label for="votosdia">Votos por día por dispositivo</label>
+      <input id="votosdia" name="votosdia" type="number" min="1" max="100" step="1" inputmode="numeric" value="${votosDia()}" required>
+      <button class="boton" type="submit">Guardar</button>
+    </form>
     ${htmlUnir()}
     <form class="panel ancho" id="fretos"><h2>Ruleta de retos (desempate)</h2>
       <p class="suave">Si en la votación final hay empate en el 1.er lugar, en la revelación aparece una ruleta que elige uno de estos 4 retos. Los empatados lo hacen en vivo y usted marca quién ganó en la página de Ganadores.</p>
@@ -1503,6 +1514,16 @@ function pAdmin() {
   };
   activarUnir();
   activarSiguiente();
+  const fv = document.getElementById('fvotos');
+  fv.onsubmit = (e) => {
+    e.preventDefault();
+    const n = Number(fv.votosdia.value);
+    if (!Number.isInteger(n) || n < 1 || n > 100) { toast('Escriba un número entero entre 1 y 100.', true); return; }
+    accion(fv.querySelector('button[type=submit]'), async () => {
+      await guardar((d) => { d.config.votosDia = n; });
+      render();
+    }, `Listo: ${n} ${n === 1 ? 'voto' : 'votos'} por día.`);
+  };
   const fr = document.getElementById('fretos');
   fr.onsubmit = (e) => {
     e.preventDefault();
