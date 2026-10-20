@@ -161,7 +161,7 @@ async function leerDoc() {
     if (!x) continue;
     if (pk === DISPOSITIVO) eventosPropios.dev = ev;
     const m = {
-      v1: {}, nom: {}, v3: {}, v3d: {}, rep: {}, cats: {},
+      v1: {}, nom: {}, v3: {}, v3d: {}, v3x: {}, rep: {}, cats: {},
     };
     for (const [dia, lista] of Object.entries(x.v1 || {})) if (Array.isArray(lista)) m.v1[texto(dia, 10)] = lista.slice(0, 100).map((i) => texto(i, 40));
     for (const [c, n] of Object.entries(x.nom || {})) {
@@ -170,6 +170,13 @@ async function leerDoc() {
     }
     for (const [c, n] of Object.entries(x.v3 || {})) m.v3[texto(c, 40)] = texto(n, 60);
     for (const [dia, n] of Object.entries(x.v3d || {})) m.v3d[texto(dia, 10)] = Number(n) || 0;
+    // Votos finales por día: { 'AAAA-MM-DD': { categoría: persona } }
+    for (const [dia, votos] of Object.entries(x.v3x || {}).slice(0, 400)) {
+      if (!votos || typeof votos !== 'object') continue;
+      const dd = {};
+      for (const [c, n] of Object.entries(votos).slice(0, 100)) dd[texto(c, 40)] = texto(n, 60);
+      m.v3x[texto(dia, 10)] = dd;
+    }
     for (const [c, n] of Object.entries(x.rep || {})) m.rep[texto(c, 40)] = texto(n, 200);
     // Una categoría solo vale si su código empieza con la llave de quien la propuso.
     for (const [id, c] of Object.entries(x.cats || {}).slice(0, 15)) {
@@ -220,7 +227,7 @@ function contenidoDispositivo(d) {
     if (c.d !== DISPOSITIVO) continue;
     cats[id] = (m.cats && m.cats[id]) || { n: c.n, r: c.r, i: c.i, t: c.t };
   }
-  return { v1: m.v1 || {}, nom: m.nom || {}, v3: m.v3 || {}, v3d: m.v3d || {}, rep: m.rep || {}, cats };
+  return { v1: m.v1 || {}, nom: m.nom || {}, v3: m.v3 || {}, v3d: m.v3d || {}, v3x: m.v3x || {}, rep: m.rep || {}, cats };
 }
 
 function contenidoConfig(d) {
@@ -260,6 +267,7 @@ function miDev(d) {
   m.nom = m.nom || {};
   m.v3 = m.v3 || {};
   m.v3d = m.v3d || {};
+  m.v3x = m.v3x || {};
   m.rep = m.rep || {};
   return m;
 }
@@ -425,10 +433,28 @@ function nominaciones(d, catId) {
   })).sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre, 'es'));
 }
 
-// Voto final de un dispositivo en una categoría, ya con las uniones aplicadas.
-function votoFinal(d, m, catId) {
-  const k = m && m.v3 && m.v3[catId];
-  return k ? resolverNombre(d, catId, k) : null;
+// Votos finales de un dispositivo en una categoría, ya con las uniones aplicadas.
+// Puede votar una vez por categoría POR DÍA; cada día suma. Formato anterior
+// (m.v3: un voto por categoría sin fecha) se cuenta como un voto más.
+function votosFinalesDe(d, m, catId) {
+  const lista = [];
+  if (!m) return lista;
+  if (m.v3 && m.v3[catId]) lista.push(resolverNombre(d, catId, m.v3[catId]));
+  for (const votos of Object.values(m.v3x || {})) {
+    if (votos[catId]) lista.push(resolverNombre(d, catId, votos[catId]));
+  }
+  return lista;
+}
+
+// Voto de este dispositivo HOY en una categoría (o null).
+function miVotoFinalHoy(d, catId) {
+  const m = d.dev[DISPOSITIVO];
+  if (!m) return null;
+  const v = m.v3x && m.v3x[hoy()] && m.v3x[hoy()][catId];
+  if (v) return v;
+  // Votos del formato anterior hechos hoy (antes de la actualización): bloquean solo hoy.
+  if (m.v3 && m.v3[catId] && (m.v3d && m.v3d[hoy()] > 0)) return m.v3[catId];
+  return null;
 }
 
 // Cantidad de votos finales emitidos en una categoría (sin decir por quién).
@@ -436,8 +462,7 @@ function votosEmitidos(d, catId) {
   const fin = finalistas(d, catId);
   let n = 0;
   for (const m of Object.values(d.dev)) {
-    const k = votoFinal(d, m, catId);
-    if (k && fin.some((f) => f.clave === k)) n++;
+    for (const k of votosFinalesDe(d, m, catId)) if (fin.some((f) => f.clave === k)) n++;
   }
   return n;
 }
@@ -455,8 +480,9 @@ function resultados(d = doc) {
     const fin = finalistas(d, c.id);
     const votos = {};
     for (const m of Object.values(d.dev)) {
-      const k = votoFinal(d, m, c.id);
-      if (k && fin.some((f) => f.clave === k)) votos[k] = (votos[k] || 0) + 1;
+      for (const k of votosFinalesDe(d, m, c.id)) {
+        if (fin.some((f) => f.clave === k)) votos[k] = (votos[k] || 0) + 1;
+      }
     }
     const max = Math.max(0, ...Object.values(votos));
     const lista = fin.map((f) => ({ ...f, votos: votos[f.clave] || 0, gana: max > 0 && (votos[f.clave] || 0) === max }));
@@ -573,7 +599,8 @@ function confeti(caja) {
 
 function votosFinalesHoy(d = doc) {
   const m = d.dev[DISPOSITIVO];
-  return (m && m.v3d && m.v3d[hoy()]) || 0;
+  if (!m) return 0;
+  return Object.keys((m.v3x && m.v3x[hoy()]) || {}).length + ((m.v3d && m.v3d[hoy()]) || 0);
 }
 
 // ------------------------------------------------------------------
@@ -1257,14 +1284,15 @@ function pVotar() {
     return;
   }
   const abierta = fa === 'final';
-  const mios = (doc.dev[DISPOSITIVO] && doc.dev[DISPOSITIVO].v3) || {};
+  const mios = {};
+  for (const x of conFinal) { const v = miVotoFinalHoy(doc, x.c.id); if (v) mios[x.c.id] = v; }
   const quedan = votosDia() - votosFinalesHoy();
   let html = `<h2 class="seccion">Votación final</h2>
     <p class="centro fase-actual">${esc(abierta ? infoFase().texto : fa === 'pausa_2_3' ? 'La votación final todavía no empieza.' : 'La votación final está cerrada.')}</p>`;
   if (abierta) html += htmlCuenta(doc.config.f3e);
-  html += `<div class="chips"><span class="chip">Votó en ${conFinal.filter((x) => mios[x.c.id]).length} de ${conFinal.length} categorías</span>
+  html += `<div class="chips"><span class="chip">Hoy votó en ${conFinal.filter((x) => mios[x.c.id]).length} de ${conFinal.length} categorías</span>
     ${abierta ? `<span class="chip">Le quedan ${Math.max(0, quedan)} votos hoy</span>` : ''}</div>
-    <p class="centro suave">Un voto por categoría desde este dispositivo, hasta ${votosDia()} por día. Una vez enviado <b>no se puede cambiar</b>.
+    <p class="centro suave">Cada día puede votar <b>una vez en cada categoría</b>, hasta ${votosDia()} votos por día. Cada voto suma. Al día siguiente se reinicia y puede volver a votar en todas. Un voto enviado <b>no se puede cambiar</b>.
     Para mantener la sorpresa solo se muestra cuántos votos se han emitido en cada categoría, no quién va ganando.</p>`;
   if (abierta && quedan <= 0) html += aviso(`Ya usó sus ${votosDia()} votos de hoy. Vuelva mañana para votar en las demás categorías.`, 'alerta');
   html += '<div class="rejilla">';
@@ -1273,7 +1301,7 @@ function pVotar() {
     const emitidos = votosEmitidos(doc, c.id);
     const linea = `<p class="autor">🗳️ ${emitidos} ${emitidos === 1 ? 'voto emitido' : 'votos emitidos'} en esta categoría</p>`;
     let cuerpo;
-    if (mios[c.id]) cuerpo = `<p class="listo">✓ Ya votó${elegido ? ' por ' + esc(elegido.nombre) : ''}.</p>`;
+    if (mios[c.id]) cuerpo = `<p class="listo">✓ Hoy votó${elegido ? ' por ' + esc(elegido.nombre) : ''}. Mañana puede volver a votar en esta categoría.</p>`;
     else if (!abierta) cuerpo = `<p class="autor">Finalistas: ${fin.map((f) => esc(f.nombre)).join(', ')}</p>`;
     else {
       cuerpo = fin.map((f) => `<label class="opcion"><input type="radio" name="c${esc(c.id)}" value="${esc(f.clave)}"> ${esc(f.nombre)}</label>`).join('') +
@@ -1290,17 +1318,17 @@ function pVotar() {
       const radio = $app.querySelector(`input[name="c${CSS.escape(catId)}"]:checked`);
       if (!radio) { toast('Primero elija a una persona.', true); return; }
       const nombre = radio.parentElement.textContent.trim();
-      if (!confirm(`¿Votar por ${nombre} en "${doc.cats[catId].n}"?\n\nNo se puede cambiar.`)) return;
+      if (!confirm(`¿Votar por ${nombre} en "${doc.cats[catId].n}"?\n\nEste voto no se puede cambiar. Mañana puede volver a votar en esta categoría.`)) return;
       const dia = hoy();
       accion(b, async () => {
         await guardar((d) => {
           const m = miDev(d);
-          if (m.v3[catId]) return;
+          if (dia !== hoy()) throw new Error('Cambió el día. Recargue la página y vote de nuevo.');
+          if (miVotoFinalHoy(d, catId)) return;
           if (fase(d) !== 'final') throw new Error('La votación final no está abierta.');
-          if ((m.v3d[dia] || 0) >= votosDia(d)) throw new Error(`Ya usó sus ${votosDia(d)} votos de hoy. Vuelva mañana.`);
-          m.v3[catId] = radio.value;
-          m.v3d[dia] = (m.v3d[dia] || 0) + 1;
-        }, (d) => !!(d.dev[DISPOSITIVO] && d.dev[DISPOSITIVO].v3 && d.dev[DISPOSITIVO].v3[catId]));
+          if (votosFinalesHoy(d) >= votosDia(d)) throw new Error(`Ya usó sus ${votosDia(d)} votos de hoy. Vuelva mañana.`);
+          m.v3x[dia] = { ...(m.v3x[dia] || {}), [catId]: radio.value };
+        });
         render();
       }, '¡Voto registrado!');
     };
@@ -1403,7 +1431,7 @@ function pAdmin() {
   for (const m of Object.values(doc.dev)) {
     for (const l of Object.values(m.v1 || {})) votos1 += l.length;
     for (const c of Object.keys(m.nom || {})) noms += listaNom(m, c).length;
-    votos3 += Object.keys(m.v3 || {}).length;
+    votos3 += Object.keys(m.v3 || {}).length + Object.values(m.v3x || {}).reduce((t, v) => t + Object.keys(v).length, 0);
   }
   const reportes = [];
   for (const m of Object.values(doc.dev)) {

@@ -22,7 +22,7 @@ desde una ventana de incógnito en su dispositivo (o pídale a Claude que lo pre
 | 12 | Nominar escribiendo un nombre; en otro celular escribir el mismo sin tildes | Cuentan como la misma persona |
 | 12a | (Organizador) Cargar la lista de participantes en Nominar; luego, desde otro celular, nominar a dos personas en una categoría | Los jugadores solo ven la lista desplegable (no pueden escribir); la tarjeta dice "2 nominados" y esas personas ya no aparecen en la lista de esa categoría |
 | 12b | (Organizador) Unir nominados: unir "Deivis" dentro de "Deivis Rojas" | Aparece "Deivis Rojas — 2 nominaciones"; con **Separar** vuelve a como estaba |
-| 13 | Pasar a la votación final y votar | "✓ Ya votó por …"; no deja votar otra vez en esa categoría |
+| 13 | Pasar a la votación final y votar | "✓ Hoy votó por …"; no deja votar otra vez en esa categoría ese día; al día siguiente sí, y el voto suma |
 | 13b | Durante la votación final, mirar una categoría | Solo dice "X votos emitidos", sin decir quién va ganando |
 | 14 | Abrir Ganadores antes de la hora de revelación | Cuenta regresiva a la revelación, sin resultados |
 | 15 | Esperar la hora de revelación (o ponerla en el pasado en Fechas) | Todos ven las tarjetas sin que nadie toque nada |
